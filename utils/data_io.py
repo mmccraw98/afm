@@ -268,5 +268,5 @@ class ForceMap:
     # TODO z transform
 
     # TODO clustering
-    
+
 
