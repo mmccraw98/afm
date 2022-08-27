@@ -4,7 +4,7 @@ from scipy.optimize import minimize
 import os
 import pickle
 from igor.binarywave import load as load_
-from src.misc import get_line_point_coords
+from utils.misc import get_line_point_coords
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 

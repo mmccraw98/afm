@@ -11,8 +11,8 @@ setup(
     author="marshall mccraw",
     author_email="mmccraw98@gmail.com",
     keywords="atomicforcemicroscopy, afm, physics, data",
-    package_dir={"": "src"},
-    packages=find_packages(where="src"),
+    package_dir={"": "utils"},
+    packages=find_packages(where="utils"),
     python_requires=">=3.7, <4",
     install_requires=["igor", "numpy", "matplotlib", "pandas", "scipy"],
     extras_require={
