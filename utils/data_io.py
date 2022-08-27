@@ -3,8 +3,8 @@ import pandas as pd
 import os
 import pickle
 import re
-import igor
-from utils.misc import search_between
+from igor.binarywave import load as load_
+from utils.misc import search_between, get_line_point_coords
 
 def get_files(dir, req_ext=None):
     '''
@@ -86,7 +86,7 @@ def process_notes(notes):
 
 def ibw2dict(filename):
     """Extract the contents of an *ibw to a dict"""
-    data = igor.binarywave.load(filename)
+    data = load_(filename)
     wave = data['wave']
 
     # Get the labels and tidy them up into a list
@@ -147,10 +147,36 @@ def load(path, required_extension=None):
 
 class force_map:
 
-    def __init__(self, directory):
-        self.directory = directory
+    def __init__(self, root_directory):
+        self.root_directory = root_directory
+        self.map_directory = None
         self.shape = None
+        self.dimensions = None
+        self.spring_const = None
+        self.map_scalars = {}
+
         self.load_map()
 
     def load_map(self):
-        print(self.directory)
+        # find files
+        files = get_files(self.root_directory)
+        # find the map file
+        possible_map = [file for file in files if not all(kw in file for kw in ['Line', 'Point'])]
+        if len(possible_map) != 1:
+            exit('the .ibw file for the map height data is missing or duplicated')
+        self.map_directory = possible_map[0]
+
+        print('loading map data...', end='\r')
+        map_dict = ibw2dict(self.map_directory)
+        self.spring_const = map_dict['notes']['SpringConstant']
+        self.dimensions = np.array([map_dict['notes']['ScanSize'], map_dict['notes']['ScanSize']])
+        for i, label in enumerate(map_dict['labels']):
+            data = np.array(map_dict['data'])[:, :, i]
+            if i == 0:
+                self.shape = data.shape
+            self.map_scalars.update({label: data})
+        print('done', end='\r')
+
+        print('loading {} force curves...'.format(len(files) - 1), end='\r')
+
+
