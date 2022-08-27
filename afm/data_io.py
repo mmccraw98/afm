@@ -3,8 +3,8 @@ import pandas as pd
 from scipy.optimize import minimize
 import os
 import pickle
+from .misc import get_line_point_coords
 from igor.binarywave import load as load_
-from afm.misc import get_line_point_coords
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
@@ -196,7 +196,7 @@ class ForceMap:
             if file == self.map_directory:
                 continue
             coords = get_line_point_coords(file)
-            self.map_vectors[coords] = [i for i in range(np.random.randint(100))]#ibw2df(file)
+            self.map_vectors[coords] = ibw2df(file)
         print('done', end='\r')
 
     def transpose(self):
