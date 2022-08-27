@@ -2,30 +2,31 @@ import numpy as np
 import pandas as pd
 import os
 import pickle
-import re
 from igor.binarywave import load as load_
-from utils.misc import search_between, get_line_point_coords
+from utils.misc import get_line_point_coords
+import matplotlib.pyplot as plt
 
-def get_files(dir, req_ext=None):
+
+def get_files(directory, req_ext=None):
     '''
     gets all the files in the given directory
-    :param dir: str directory from which you want to load files from
+    :param directory: str directory from which you want to load files from
     :param req_ext: optional str required tc_data extension
     :return: list of str names of the files in the given directory
     '''
     if req_ext is None:
-        return [os.path.join(dir, f) for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]
+        return [os.path.join(directory, f) for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
     else:
-        return [os.path.join(dir, f) for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f)) and req_ext in f]
+        return [os.path.join(directory, f) for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f)) and req_ext in f]
 
 
-def get_folders(dir):
+def get_folders(directory):
     '''
     gets all the folders in the given directory
-    :param dir: str directory from which you want the sub-directories
+    :param directory: str directory from which you want the sub-directories
     :return: list of str names of the sub-directories
     '''
-    return [f.path for f in os.scandir(dir) if f.is_dir()]
+    return [f.path for f in os.scandir(directory) if f.is_dir()]
 
 
 # appropriating some functions from from https://github.com/N-Parsons/ibw-extractor
@@ -145,15 +146,20 @@ def load(path, required_extension=None):
     return data
 
 
-class force_map:
+class ForceMap:
 
-    def __init__(self, root_directory):
+    def __init__(self, root_directory, spring_const=None, sampling_frequency=None, probe_radius=None):
         self.root_directory = root_directory
         self.map_directory = None
         self.shape = None
         self.dimensions = None
-        self.spring_const = None
+        self.spring_const = spring_const
+        self.sampling_frequency = sampling_frequency
+        self.probe_radius = probe_radius
         self.map_scalars = {}
+        self.map_vectors = None
+        self.x = None
+        self.y = None
 
         self.load_map()
 
@@ -168,15 +174,42 @@ class force_map:
 
         print('loading map data...', end='\r')
         map_dict = ibw2dict(self.map_directory)
-        self.spring_const = map_dict['notes']['SpringConstant']
+        if self.spring_const is None:
+            self.spring_const = map_dict['notes']['SpringConstant']
         self.dimensions = np.array([map_dict['notes']['ScanSize'], map_dict['notes']['ScanSize']])
         for i, label in enumerate(map_dict['labels']):
             data = np.array(map_dict['data'])[:, :, i]
             if i == 0:
                 self.shape = data.shape
-            self.map_scalars.update({label: data})
+                x, y = np.linspace(0, self.dimensions[0], self.shape[0]), np.linspace(0, self.dimensions[1], self.shape[1])
+                self.x, self.y = np.meshgrid(x, y)
+            self.map_scalars.update({label: data.T})
         print('done', end='\r')
 
         print('loading {} force curves...'.format(len(files) - 1), end='\r')
+        self.map_vectors = np.zeros(self.shape, dtype='object')
+        for file in files:
+            if file == self.map_directory:
+                continue
+            coords = get_line_point_coords(file)
+            self.map_vectors[coords] = 0#ibw2df(file)
 
 
+    def transpose(self):
+        for key, value in self.map_scalars.items():
+            self.map_scalars[key] = value.T
+        self.map_vectors = self.map_vectors.T
+
+
+    def plot_map(self):
+        figs, axs = plt.subplots(1, len(self.map_scalars.keys()))
+        for i, (ax, key) in enumerate(zip(axs, self.map_scalars.keys())):
+            ax.contourf(self.x, self.y, self.map_scalars[key])
+            ax.set_title(key)
+            ax.set_xlabel('x (m)')
+            ax.set_ylabel('y (m)')
+        plt.show()
+
+
+    def flatten_and_shif(self):
+        pass
