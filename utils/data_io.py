@@ -110,8 +110,8 @@ def ibw2dict(filename):
     return {"filename": fname, "labels": labels, "notes": notes, "data": wData}
 
 
-def ibw2df(ibw_file_name):
-    data = ibw2dict(ibw_file_name)
+def ibw2df(filename):
+    data = ibw2dict(filename)
     headers = data['labels']
     return pd.DataFrame(data['data'], columns=headers)
 
@@ -143,3 +143,14 @@ def load(path, required_extension=None):
     else:
         exit('extension not yet supported: {}'.format(file_name))
     return data
+
+
+class force_map:
+
+    def __init__(self, directory):
+        self.directory = directory
+        self.shape = None
+        self.load_map()
+
+    def load_map(self):
+        print(self.directory)
