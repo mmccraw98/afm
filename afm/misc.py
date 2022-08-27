@@ -13,6 +13,7 @@ def get_line_point_coords(filename):
 
 def progress_bar(current, total, bar_length=20, message='Loading'):
     fraction = current / total
+
     arrow = int(fraction * bar_length - 1) * '-' + '>'
     padding = int(bar_length - len(arrow)) * ' '
 

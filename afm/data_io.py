@@ -211,7 +211,7 @@ class ForceMap:
         self.fd_curves = np.zeros(self.shape, dtype='object')
         self.feature_mask = np.ones(self.shape) == 1
         for i, file in enumerate(files):
-            progress_bar(i, len(files) - 1, 'loading force curves')
+            progress_bar(i, len(files) - 1, message='loading force curves')
             if file == self.map_directory:
                 continue
             coords = get_line_point_coords(file)
@@ -286,7 +286,7 @@ class ForceMap:
         for i, row in enumerate(self.map_vectors):
             for j, df in enumerate(row):
                 tot += 1
-                progress_bar(tot, self.shape[0] * self.shape[1], 'formatting force curves')
+                progress_bar(tot, self.shape[0] * self.shape[1], message='formatting force curves')
                 self.fd_curves[i, j] = format_fd(df, self.spring_const, self.pct_smooth)
         print('done', end='\r')
 
