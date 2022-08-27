@@ -289,8 +289,3 @@ class ForceMap:
 
     # TODO tilted sample correction
 
-    # TODO z transform
-
-    # TODO clustering
-
-
