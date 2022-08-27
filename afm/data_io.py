@@ -5,7 +5,6 @@ import os
 import pickle
 from .misc import get_line_point_coords, progress_bar
 from .math_funcs import sma_shift
-from .visco import get_r, mdft, get_avg_q
 from igor.binarywave import load as load_
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
