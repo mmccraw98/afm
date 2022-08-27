@@ -22,3 +22,10 @@ def mdft(x, r, length=None):
     '''
     n = np.arange(0, x.size, 1)
     return np.fft.fftshift(np.fft.fft(x * r ** -n, n=length))
+
+
+def get_avg_q(stresses, strains, r_mult=1):
+    N = min(x.size for x in stresses)
+    r = max(max(get_r(f_s), get_r(f_e)) for f_s, f_e in zip(stresses, strains)) * r_mult
+    q = np.mean([mdft(f_s, r, N) for f_s in stresses], axis=0) / np.mean([mdft(f_e, r, N) for f_e in strains], axis=0)
+    return q
