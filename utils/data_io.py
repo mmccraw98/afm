@@ -1,10 +1,12 @@
 import numpy as np
 import pandas as pd
+from scipy.optimize import minimize
 import os
 import pickle
 from igor.binarywave import load as load_
 from utils.misc import get_line_point_coords
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 def get_files(directory, req_ext=None):
@@ -17,7 +19,8 @@ def get_files(directory, req_ext=None):
     if req_ext is None:
         return [os.path.join(directory, f) for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
     else:
-        return [os.path.join(directory, f) for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f)) and req_ext in f]
+        return [os.path.join(directory, f) for f in os.listdir(directory) if
+                os.path.isfile(os.path.join(directory, f)) and req_ext in f]
 
 
 def get_folders(directory):
@@ -181,7 +184,8 @@ class ForceMap:
             data = np.array(map_dict['data'])[:, :, i]
             if i == 0:
                 self.shape = data.shape
-                x, y = np.linspace(0, self.dimensions[0], self.shape[0]), np.linspace(0, self.dimensions[1], self.shape[1])
+                x, y = np.linspace(0, self.dimensions[0], self.shape[0]), np.linspace(0, self.dimensions[1],
+                                                                                      self.shape[1])
                 self.x, self.y = np.meshgrid(x, y)
             self.map_scalars.update({label: data.T})
         print('done', end='\r')
@@ -192,24 +196,62 @@ class ForceMap:
             if file == self.map_directory:
                 continue
             coords = get_line_point_coords(file)
-            self.map_vectors[coords] = 0#ibw2df(file)
-
+            self.map_vectors[coords] = 0  # ibw2df(file)
 
     def transpose(self):
         for key, value in self.map_scalars.items():
             self.map_scalars[key] = value.T
         self.map_vectors = self.map_vectors.T
 
-
     def plot_map(self):
         figs, axs = plt.subplots(1, len(self.map_scalars.keys()))
         for i, (ax, key) in enumerate(zip(axs, self.map_scalars.keys())):
-            ax.contourf(self.x, self.y, self.map_scalars[key])
+            a_i = ax.contourf(self.x, self.y, self.map_scalars[key])
             ax.set_title(key)
             ax.set_xlabel('x (m)')
             ax.set_ylabel('y (m)')
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes('right', size='5%', pad=0.05)
+            figs.colorbar(a_i, cax=cax, orientation='vertical')
+        plt.tight_layout()
         plt.show()
 
+    # TODO make 3d surface plot
 
-    def flatten_and_shif(self):
-        pass
+    def flatten_and_shift(self, order=1, edge_mask=None):
+        # l1 optimization of background shift to minimize outlier error
+        def obj(X, func, real):
+            return np.sum(abs(func(X) - real) ** 2)
+
+        if order < 0:
+            exit('flattening below order 0 doesnt make sense to me so i will crash now :)')
+        # sp.optimize.minimize()
+        if 'MapHeight' not in self.map_scalars.keys():
+            exit('there is no height data')
+        height = self.map_scalars['MapHeight']
+
+        if edge_mask is not None:
+            mask = np.ones(height.shape)
+        else:
+            mask = np.ones(height.shape)
+
+        if order == 0:
+            height -= np.min(height)
+
+        elif order == 1:
+            def lin(X):
+                A, B, C = X
+                return A * self.x + B * self.y + C
+
+            x_opt = minimize(obj, x0=[0, 0, 0], args=(lin, height), method='Nelder-Mead').x
+            height -= lin(x_opt)
+
+        elif order == 2:
+            def quad(X):
+                A, B, C, D, E = X
+                return A * self.x ** 2 + B * self.x + C * self.y ** 2 + D * self.y + E
+
+            x_opt = minimize(obj, x0=[0, 0, 0, 0, 0], args=(quad, height), method='Nelder-Mead').x
+            height -= quad(x_opt)
+
+        self.map_scalars['MapHeight'] = height
