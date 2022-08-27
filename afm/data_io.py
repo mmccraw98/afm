@@ -1,10 +1,9 @@
 import numpy as np
 import pandas as pd
-import sys
 from scipy.optimize import minimize
 import os
 import pickle
-from .misc import get_line_point_coords
+from .misc import get_line_point_coords, progress_bar
 from .math_funcs import sma_shift
 from .visco import get_r, mdft, get_avg_q
 from igor.binarywave import load as load_
@@ -154,7 +153,7 @@ def load(path, required_extension=None):
 
 def format_fd(df, k, pct_smooth=0.01):
     f = df.Defl.values * k
-    h = (df.ZSnsr-df.Defl).values
+    h = (df.ZSnsr - df.Defl).values
     j = np.argmax(f[:int(0.8 * f.size)])
     win_size = int(pct_smooth * j)
     f = sma_shift(f[:j], win_size)
@@ -164,7 +163,8 @@ def format_fd(df, k, pct_smooth=0.01):
 
 class ForceMap:
 
-    def __init__(self, root_directory, spring_const=None, sampling_frequency=None, probe_radius=1, contact_beta=3/2, pct_smooth=0.01):
+    def __init__(self, root_directory, spring_const=None, sampling_frequency=None, probe_radius=1, contact_beta=3 / 2,
+                 pct_smooth=0.01):
         self.root_directory = root_directory
         self.map_directory = None
         self.shape = None
@@ -192,7 +192,7 @@ class ForceMap:
             exit('the .ibw file for the map height data is missing or duplicated')
         self.map_directory = possible_map[0]
 
-        sys.stdout.write('\rloading map data...')
+        print('loading map data...', end='\r')
         map_dict = ibw2dict(self.map_directory)
         if self.spring_const is None:
             self.spring_const = map_dict['notes']['SpringConstant']
@@ -205,24 +205,24 @@ class ForceMap:
                                                                                       self.shape[1])
                 self.x, self.y = np.meshgrid(x, y)
             self.map_scalars.update({label: data.T})
-        sys.stdout.write('\rdone')
+        print('done', end='\r')
 
         self.map_vectors = np.zeros(self.shape, dtype='object')
         self.fd_curves = np.zeros(self.shape, dtype='object')
         self.feature_mask = np.ones(self.shape) == 1
         for i, file in enumerate(files):
-            sys.stdout.write('\rloading {} of {} force curves...'.format(i, len(files) - 1))
+            progress_bar(i, len(files) - 1, 'loading force curves')
             if file == self.map_directory:
                 continue
             coords = get_line_point_coords(file)
             self.map_vectors[coords] = ibw2df(file)
-        sys.stdout.write('\rdone')
+        print('done', end='\r')
 
     def transpose(self):
         for key, value in self.map_scalars.items():
-            self.map_scalars[key] = value.T
-        self.map_vectors = self.map_vectors.T
-        self.fd_curves = self.fd_curves.T
+            self.map_scalars[key] = value.T[::-1]
+        self.map_vectors = self.map_vectors.T[::-1]
+        self.fd_curves = self.fd_curves.T[::-1]
 
     def plot_map(self):
         figs, axs = plt.subplots(1, len(self.map_scalars.keys()))
@@ -253,7 +253,7 @@ class ForceMap:
 
         mask = np.ones(height.shape)
         mask[int(up_down_mask[0] * mask.shape[0]): int(up_down_mask[1] * mask.shape[0]),
-             int(left_right_mask[0] * mask.shape[1]): int(left_right_mask[1] * mask.shape[1])] = 0
+        int(left_right_mask[0] * mask.shape[1]): int(left_right_mask[1] * mask.shape[1])] = 0
 
         if show_plots:
             plt.imshow(mask)
@@ -286,10 +286,9 @@ class ForceMap:
         for i, row in enumerate(self.map_vectors):
             for j, df in enumerate(row):
                 tot += 1
-                sys.stdout.write('\rformatting {} of {} force curves...'.format(tot, self.shape[0] * self.shape[1]))
+                progress_bar(tot, self.shape[0] * self.shape[1], 'formatting force curves')
                 self.fd_curves[i, j] = format_fd(df, self.spring_const, self.pct_smooth)
-        sys.stdout.write('\rdone')
-
+        print('done', end='\r')
 
     def cut_background(self, mult, show_plots=True):
         height_map = self.map_scalars['MapFlattenHeight'].copy()
@@ -302,13 +301,17 @@ class ForceMap:
             axs[0].hist(heights[heights > cut], bins=100, label='Cut')
             axs[0].legend()
             axs[0].set_title('Height Histogram')
-            height_map[np.invert(self.feature_mask)] = 0
-            axs[1].imshow(height_map)
+            height_map[np.invert(self.feature_mask)] = -1
+            masked_array = np.ma.masked_where(height_map == -1, height_map)
+            cmap = plt.get_cmap('viridis')
+            cmap.set_bad(color='white')
+            axs[1].contourf(self.x, self.y, masked_array, cmap=cmap)
+            axs[1].set_xlabel('x (m)')
+            axs[1].set_ylabel('y (m)')
             axs[1].set_title('Masked')
+            plt.tight_layout()
             plt.show()
-
 
     # TODO thin sample correction
 
     # TODO tilted sample correction
-
