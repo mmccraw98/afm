@@ -179,6 +179,7 @@ class ForceMap:
         self.x = None
         self.y = None
         self.pct_smooth = pct_smooth
+        self.feature_mask = None
 
         self.load_map()
 
@@ -208,6 +209,7 @@ class ForceMap:
 
         self.map_vectors = np.zeros(self.shape, dtype='object')
         self.fd_curves = np.zeros(self.shape, dtype='object')
+        self.feature_mask = np.ones(self.shape) == 1
         for i, file in enumerate(files):
             sys.stdout.write('\rloading {} of {} force curves...'.format(i, len(files) - 1))
             if file == self.map_directory:
@@ -237,7 +239,7 @@ class ForceMap:
 
     # TODO make 3d surface plot
 
-    def flatten_and_shift(self, order=1, left_right_mask=[0, 1], up_down_mask=[0, 1]):
+    def flatten_and_shift(self, order=1, left_right_mask=[0, 1], up_down_mask=[0, 1], show_plots=True):
         # l1 optimization of background shift to minimize outlier error
         def obj(X, func, real):
             return np.sum(abs(func(X) - real) ** 2)
@@ -252,8 +254,11 @@ class ForceMap:
         mask = np.ones(height.shape)
         mask[int(up_down_mask[0] * mask.shape[0]): int(up_down_mask[1] * mask.shape[0]),
              int(left_right_mask[0] * mask.shape[1]): int(left_right_mask[1] * mask.shape[1])] = 0
-        # plt.imshow(mask)
-        # plt.show()
+
+        if show_plots:
+            plt.imshow(mask)
+            plt.title('Mask')
+            plt.show()
 
         if order == 0:
             height -= np.min(height)
@@ -280,10 +285,28 @@ class ForceMap:
         tot = 0
         for i, row in enumerate(self.map_vectors):
             for j, df in enumerate(row):
+                tot += 1
                 sys.stdout.write('\rformatting {} of {} force curves...'.format(tot, self.shape[0] * self.shape[1]))
                 self.fd_curves[i, j] = format_fd(df, self.spring_const, self.pct_smooth)
-                tot += 1
         sys.stdout.write('\rdone')
+
+
+    def cut_background(self, mult, show_plots=True):
+        height_map = self.map_scalars['MapFlattenHeight'].copy()
+        heights = height_map.ravel()
+        cut = np.mean(heights) * mult
+        self.feature_mask = height_map > cut
+        if show_plots:
+            figs, axs = plt.subplots(1, 2)
+            axs[0].hist(heights, bins=100, label='Full')
+            axs[0].hist(heights[heights > cut], bins=100, label='Cut')
+            axs[0].legend()
+            axs[0].set_title('Height Histogram')
+            height_map[np.invert(self.feature_mask)] = 0
+            axs[1].imshow(height_map)
+            axs[1].set_title('Masked')
+            plt.show()
+
 
     # TODO thin sample correction
 
