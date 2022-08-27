@@ -196,7 +196,8 @@ class ForceMap:
             if file == self.map_directory:
                 continue
             coords = get_line_point_coords(file)
-            self.map_vectors[coords] = 0  # ibw2df(file)
+            self.map_vectors[coords] = [i for i in range(np.random.randint(100))]#ibw2df(file)
+        print('done', end='\r')
 
     def transpose(self):
         for key, value in self.map_scalars.items():
