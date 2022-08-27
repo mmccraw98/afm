@@ -218,7 +218,7 @@ class ForceMap:
 
     # TODO make 3d surface plot
 
-    def flatten_and_shift(self, order=1, edge_mask=None):
+    def flatten_and_shift(self, order=1, left_right_mask=[0, 1], up_down_mask=[0, 1]):
         # l1 optimization of background shift to minimize outlier error
         def obj(X, func, real):
             return np.sum(abs(func(X) - real) ** 2)
@@ -228,12 +228,13 @@ class ForceMap:
         # sp.optimize.minimize()
         if 'MapHeight' not in self.map_scalars.keys():
             exit('there is no height data')
-        height = self.map_scalars['MapHeight']
+        height = self.map_scalars['MapHeight'].copy()
 
-        if edge_mask is not None:
-            mask = np.ones(height.shape)
-        else:
-            mask = np.ones(height.shape)
+        mask = np.ones(height.shape)
+        mask[int(up_down_mask[0] * mask.shape[0]): int(up_down_mask[1] * mask.shape[0]),
+             int(left_right_mask[0] * mask.shape[1]): int(left_right_mask[1] * mask.shape[1])] = 0
+        # plt.imshow(mask)
+        # plt.show()
 
         if order == 0:
             height -= np.min(height)
@@ -254,4 +255,17 @@ class ForceMap:
             x_opt = minimize(obj, x0=[0, 0, 0, 0, 0], args=(quad, height), method='Nelder-Mead').x
             height -= quad(x_opt)
 
-        self.map_scalars['MapHeight'] = height
+        self.map_scalars.update({'MapFlattenHeight': height - np.min(height)})
+
+    # TODO this
+    def format_fds(self):
+        pass
+
+    # TODO thin sample correction
+
+    # TODO tilted sample correction
+
+    # TODO z transform
+
+    # TODO clustering
+
