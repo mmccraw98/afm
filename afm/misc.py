@@ -20,3 +20,18 @@ def progress_bar(current, total, bar_length=20, message='Loading'):
 
     print(message + f': [{arrow}{padding}] {int(fraction*100)}%', end=ending)
 
+
+def selectyesno(prompt):
+    '''
+    given a prompt with a yes / no input answer, return the boolean value of the given answer
+    :param prompt: str a prompy with a yes / no answer
+    :return: bool truth value of the given answer: yes -> True, no -> False
+    '''
+    print(prompt)  # print the user defined yes / no question prompt
+    # list of understood yes inputs, and a list of understood no inputs
+    yes_choices, no_choices = ['yes', 'ye', 'ya', 'y', 'yay'], ['no', 'na', 'n', 'nay']
+    # use assignment expression to ask for inputs until an understood input is given
+    while (choice := input('enter: (y / n) ').lower()) not in yes_choices + no_choices:
+        print('input not understood: {} '.format(choice))
+    # if the understood input is a no, it returns false, if it is a yes, it returns true
+    return choice in yes_choices
