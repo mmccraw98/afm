@@ -1,9 +1,12 @@
 import numpy as np
 import pandas as pd
+import sys
 from scipy.optimize import minimize
 import os
 import pickle
 from .misc import get_line_point_coords
+from .math_funcs import sma_shift
+from .visco import get_r, mdft, get_avg_q
 from igor.binarywave import load as load_
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -149,20 +152,33 @@ def load(path, required_extension=None):
     return data
 
 
+def format_fd(df, k, pct_smooth=0.01):
+    f = df.Defl.values * k
+    h = (df.ZSnsr-df.Defl).values
+    j = np.argmax(f[:int(0.8 * f.size)])
+    win_size = int(pct_smooth * j)
+    f = sma_shift(f[:j], win_size)
+    i = np.argmin(f)
+    return pd.DataFrame({'f': abs(f[i:] - f[i]), 'h': abs(sma_shift(h[i:j], win_size))})
+
+
 class ForceMap:
 
-    def __init__(self, root_directory, spring_const=None, sampling_frequency=None, probe_radius=None):
+    def __init__(self, root_directory, spring_const=None, sampling_frequency=None, probe_radius=1, contact_beta=3/2, pct_smooth=0.01):
         self.root_directory = root_directory
         self.map_directory = None
         self.shape = None
         self.dimensions = None
         self.spring_const = spring_const
         self.sampling_frequency = sampling_frequency
-        self.probe_radius = probe_radius
+        self.contact_alpha = 16 * np.sqrt(probe_radius) / 3
+        self.contact_beta = contact_beta
         self.map_scalars = {}
         self.map_vectors = None
+        self.fd_curves = None
         self.x = None
         self.y = None
+        self.pct_smooth = pct_smooth
 
         self.load_map()
 
@@ -175,7 +191,7 @@ class ForceMap:
             exit('the .ibw file for the map height data is missing or duplicated')
         self.map_directory = possible_map[0]
 
-        print('loading map data...', end='\r')
+        sys.stdout.write('\rloading map data...')
         map_dict = ibw2dict(self.map_directory)
         if self.spring_const is None:
             self.spring_const = map_dict['notes']['SpringConstant']
@@ -188,21 +204,23 @@ class ForceMap:
                                                                                       self.shape[1])
                 self.x, self.y = np.meshgrid(x, y)
             self.map_scalars.update({label: data.T})
-        print('done', end='\r')
+        sys.stdout.write('\rdone')
 
-        print('loading {} force curves...'.format(len(files) - 1), end='\r')
         self.map_vectors = np.zeros(self.shape, dtype='object')
-        for file in files:
+        self.fd_curves = np.zeros(self.shape, dtype='object')
+        for i, file in enumerate(files):
+            sys.stdout.write('\rloading {} of {} force curves...'.format(i, len(files) - 1))
             if file == self.map_directory:
                 continue
             coords = get_line_point_coords(file)
             self.map_vectors[coords] = ibw2df(file)
-        print('done', end='\r')
+        sys.stdout.write('\rdone')
 
     def transpose(self):
         for key, value in self.map_scalars.items():
             self.map_scalars[key] = value.T
         self.map_vectors = self.map_vectors.T
+        self.fd_curves = self.fd_curves.T
 
     def plot_map(self):
         figs, axs = plt.subplots(1, len(self.map_scalars.keys()))
@@ -258,9 +276,14 @@ class ForceMap:
 
         self.map_scalars.update({'MapFlattenHeight': height - np.min(height)})
 
-    # TODO this
     def format_fds(self):
-        pass
+        tot = 0
+        for i, row in enumerate(self.map_vectors):
+            for j, df in enumerate(row):
+                sys.stdout.write('\rformatting {} of {} force curves...'.format(tot, self.shape[0] * self.shape[1]))
+                self.fd_curves[i, j] = format_fd(df, self.spring_const, self.pct_smooth)
+                tot += 1
+        sys.stdout.write('\rdone')
 
     # TODO thin sample correction
 
