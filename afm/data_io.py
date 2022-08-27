@@ -8,6 +8,7 @@ from .math_funcs import sma_shift
 from igor.binarywave import load as load_
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from copy import deepcopy
 
 
 def get_files(directory, req_ext=None):
@@ -311,6 +312,11 @@ class ForceMap:
             plt.tight_layout()
             plt.show()
 
+
+    def copy(self):
+        return deepcopy(self)
+
     # TODO thin sample correction
 
     # TODO tilted sample correction
+
