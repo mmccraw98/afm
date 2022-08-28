@@ -9,6 +9,7 @@ from igor.binarywave import load as load_
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from copy import deepcopy
+from mlinsights.mlmodel import KMeansL1L2
 
 
 def get_files(directory, req_ext=None):
@@ -221,6 +222,7 @@ class ForceMap:
     def transpose(self):
         for key, value in self.map_scalars.items():
             self.map_scalars[key] = value.T[::-1]
+        self.feature_mask = self.feature_mask.T[::-1]
         self.map_vectors = self.map_vectors.T[::-1]
         self.fd_curves = self.fd_curves.T[::-1]
 
@@ -244,9 +246,8 @@ class ForceMap:
         def obj(X, func, real):
             return np.sum(abs(func(X) - real) ** 2)
 
-        if order < 0:
-            exit('flattening below order 0 doesnt make sense to me so i will crash now :)')
-        # sp.optimize.minimize()
+        if order not in [0, 1, 2]:
+            exit('flattening {} doesnt make sense to me so i will crash now :)'.format(order))
         if 'MapHeight' not in self.map_scalars.keys():
             exit('there is no height data')
         height = self.map_scalars['MapHeight'].copy()
@@ -312,6 +313,63 @@ class ForceMap:
             plt.tight_layout()
             plt.show()
 
+    def ml_flatten_and_shift(self, num_features=2, order=1, show_plots=True):
+        '''
+        kind of experimental function for flattening the height of force maps and shifting them to start at 0 height
+        there are assumed to be a certain number features in an image for instance, a cell sitting atop a culture dish
+        gives two features: the cell and the dish.  we can then identify these features by their distinct heights
+        (we use 2 by default) and then we take the lowest height out of the group and make a mask
+        using the mask, we fit a surface of a given order to the mask and then subtract the fitted surface from the
+        height data
+        :param num_features: number of distinct topographical features in the force map
+        :param order: order of surface plane fit for background subtraction
+        :param show_plots: whether or not to show the mask image
+        :return: adds a mapflattenheight element to self.map_scalars associated with the corrected height map
+        and adds a feature_map to self corresponding to the non-cut portion of the height map
+        '''
+
+        # l1 optimization of background shift to minimize outlier error
+        def obj(X, func, real):
+            return np.sum(abs(func(X) - real) ** 2)
+
+        if order not in [0, 1, 2]:
+            exit('flattening {} doesnt make sense to me so i will crash now :)'.format(order))
+        if 'MapHeight' not in self.map_scalars.keys():
+            exit('there is no height data')
+
+        self.format_fds()
+        sizes = np.array([df.f.size for df in self.fd_curves.ravel()])
+        height = self.map_scalars['MapHeight'].copy().ravel()
+        model = KMeansL1L2(n_clusters=num_features, norm='L1', init='k-means++', random_state=42)
+        data = np.concatenate([feature.reshape(-1, 1) for feature in [height, sizes]], axis=1)
+        model.fit(data)
+        background_label = np.argmin([np.mean(height[model.labels_ == label]) for label in np.unique(model.labels_)])
+        mask = np.invert(model.labels_ == background_label).reshape(self.shape)
+        if show_plots:
+            plt.imshow(mask)
+            plt.title('Mask')
+            plt.show()
+        if order == 0:
+            height -= np.min(height)
+
+        elif order == 1:
+            def lin(X):
+                A, B, C = X
+                return A * self.x + B * self.y + C
+
+            x_opt = minimize(obj, x0=[0, 0, 0], args=(lin, height), method='Nelder-Mead').x
+            height -= lin(x_opt)
+
+        elif order == 2:
+            def quad(X):
+                A, B, C, D, E = X
+                return A * self.x ** 2 + B * self.x + C * self.y ** 2 + D * self.y + E
+
+            x_opt = minimize(obj, x0=[0, 0, 0, 0, 0], args=(quad, height), method='Nelder-Mead').x
+            height -= quad(x_opt)
+
+        self.map_scalars.update({'MapFlattenHeight': height - np.min(height)})
+        self.feature_mask = mask
 
     def copy(self):
         return deepcopy(self)
@@ -319,4 +377,3 @@ class ForceMap:
     # TODO thin sample correction
 
     # TODO tilted sample correction
-
