@@ -345,6 +345,7 @@ class ForceMap:
         model.fit(data)
         background_label = np.argmin([np.mean(height[model.labels_ == label]) for label in np.unique(model.labels_)])
         mask = np.invert(model.labels_ == background_label).reshape(self.shape)
+        height = height.reshape(self.shape)
         if show_plots:
             plt.imshow(mask)
             plt.title('Mask')
