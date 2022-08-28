@@ -243,8 +243,8 @@ class ForceMap:
 
     def flatten_and_shift(self, order=1, left_right_mask=[0, 1], up_down_mask=[0, 1], show_plots=True):
         # l1 optimization of background shift to minimize outlier error
-        def obj(X, func, real):
-            return np.sum(abs(func(X) - real) ** 2)
+        def obj(X, func, real, mask):
+            return np.sum(abs(func(X) - real) * mask ** 2)
 
         if order not in [0, 1, 2]:
             exit('flattening {} doesnt make sense to me so i will crash now :)'.format(order))
@@ -262,14 +262,14 @@ class ForceMap:
             plt.show()
 
         if order == 0:
-            height -= np.min(height)
+            height -= np.min(height[mask == 1])
 
         elif order == 1:
             def lin(X):
                 A, B, C = X
                 return A * self.x + B * self.y + C
 
-            x_opt = minimize(obj, x0=[0, 0, 0], args=(lin, height), method='Nelder-Mead').x
+            x_opt = minimize(obj, x0=[0, 0, 0], args=(lin, height, mask), method='Nelder-Mead').x
             height -= lin(x_opt)
 
         elif order == 2:
@@ -277,7 +277,7 @@ class ForceMap:
                 A, B, C, D, E = X
                 return A * self.x ** 2 + B * self.x + C * self.y ** 2 + D * self.y + E
 
-            x_opt = minimize(obj, x0=[0, 0, 0, 0, 0], args=(quad, height), method='Nelder-Mead').x
+            x_opt = minimize(obj, x0=[0, 0, 0, 0, 0], args=(quad, height, mask), method='Nelder-Mead').x
             height -= quad(x_opt)
 
         self.map_scalars.update({'MapFlattenHeight': height - np.min(height)})
@@ -329,8 +329,8 @@ class ForceMap:
         '''
 
         # l1 optimization of background shift to minimize outlier error
-        def obj(X, func, real):
-            return np.sum(abs(func(X) - real) ** 2)
+        def obj(X, func, real, mask):
+            return np.sum(abs(func(X) - real) * mask ** 2)
 
         if order not in [0, 1, 2]:
             exit('flattening {} doesnt make sense to me so i will crash now :)'.format(order))
@@ -350,14 +350,14 @@ class ForceMap:
             plt.title('Mask')
             plt.show()
         if order == 0:
-            height -= np.min(height)
+            height -= np.min(height[np.invert(mask)])
 
         elif order == 1:
             def lin(X):
                 A, B, C = X
                 return A * self.x + B * self.y + C
 
-            x_opt = minimize(obj, x0=[0, 0, 0], args=(lin, height), method='Nelder-Mead').x
+            x_opt = minimize(obj, x0=[0, 0, 0], args=(lin, height, np.invert(mask)), method='Nelder-Mead').x
             height -= lin(x_opt)
 
         elif order == 2:
@@ -365,7 +365,7 @@ class ForceMap:
                 A, B, C, D, E = X
                 return A * self.x ** 2 + B * self.x + C * self.y ** 2 + D * self.y + E
 
-            x_opt = minimize(obj, x0=[0, 0, 0, 0, 0], args=(quad, height), method='Nelder-Mead').x
+            x_opt = minimize(obj, x0=[0, 0, 0, 0, 0], args=(quad, height, np.invert(mask)), method='Nelder-Mead').x
             height -= quad(x_opt)
 
         self.map_scalars.update({'MapFlattenHeight': height - np.min(height)})
