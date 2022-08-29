@@ -3,7 +3,7 @@ import pandas as pd
 from scipy.optimize import minimize
 import os
 import pickle
-from .misc import get_line_point_coords, progress_bar
+from .misc import get_line_point_coords, progress_bar, get_window_size, get_elbow_min
 from .math_funcs import sma_shift
 from igor.binarywave import load as load_
 import matplotlib.pyplot as plt
@@ -152,14 +152,26 @@ def load(path, required_extension=None):
     return data
 
 
-def format_fd(df, k, pct_smooth=0.01):
+def format_fd(df, k, pct_smooth=0.01, num_attempts=10, n_pi_rot=10):
     f = df.Defl.values * k
     h = (df.ZSnsr - df.Defl).values
-    j = np.argmax(f[:int(0.8 * f.size)])
-    win_size = int(pct_smooth * j)
-    f = sma_shift(f[:j], win_size)
-    i = np.argmin(f)
-    return pd.DataFrame({'f': abs(f[i:] - f[i]), 'h': abs(sma_shift(h[i:j], win_size))})
+    j0 = np.argmax(df.ZSnsr.values)
+    j = np.argmax(f[: j0])
+    i0 = get_window_size(0.1, f.size)
+    offset = get_window_size(0.01, j - i0)
+    f_temp = sma_shift(f[i0: j], offset)
+    i_vals = [0]
+    for n in range(num_attempts):
+        i_vals.append(np.argmin(f_temp[i_vals[-1]:]) + i_vals[-1])
+    i = int(np.mean(i_vals[1:])) + offset
+    i += np.argmin(f[i:j])
+    win_size = get_window_size(pct_smooth, j - i)
+    f = sma_shift(f[i:j], win_size)
+    h = sma_shift(h[i:j], win_size)
+    i = get_elbow_min(h, f, np.pi * n_pi_rot)
+    f = f[i:] - f[i]
+    h = h[i:] - h[i]
+    return pd.DataFrame({'f': abs(f), 'h': abs(h)})
 
 
 class ForceMap:

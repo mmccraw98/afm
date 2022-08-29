@@ -1,5 +1,12 @@
 import re
 import os
+import numpy as np
+
+
+def get_window_size(percent, size):
+    win_size = int(percent * size)
+    return win_size + int(win_size == 0)
+
 
 def search_between(start, end, string):
     return re.search('%s(.*)%s' % (start, end), string).group(1)
@@ -19,7 +26,7 @@ def progress_bar(current, total, bar_length=20, message='Loading'):
 
     ending = '\n' if current == total else '\r'
 
-    print(message + f': [{arrow}{padding}] {int(fraction*100)}%', end=ending)
+    print(message + f': [{arrow}{padding}] {int(fraction * 100)}%', end=ending)
 
 
 def selectyesno(prompt):
@@ -36,3 +43,24 @@ def selectyesno(prompt):
         print('input not understood: {} '.format(choice))
     # if the understood input is a no, it returns false, if it is a yes, it returns true
     return choice in yes_choices
+
+
+def rotate_vector(data, angle):
+    # make rotation matrix
+    theta = np.radians(angle)
+    co = np.cos(theta)
+    si = np.sin(theta)
+    rotation_matrix = np.array(((co, -si), (si, co)))
+    # rotate data vector
+    rotated_vector = data.dot(rotation_matrix)
+    # return index of elbow
+    return rotated_vector
+
+
+def scale(arr):
+    return (arr - min(arr)) / (max(arr) - min(arr))
+
+
+def get_elbow_min(arr_x, arr_y, angle):
+    data = rotate_vector(np.concatenate((scale(arr_x).reshape(-1, 1), scale(arr_y).reshape(-1, 1)), axis=1), angle)
+    return np.argmin(data[:, 1])
