@@ -152,7 +152,7 @@ def load(path, required_extension=None):
     return data
 
 
-def format_fd(df, k, pct_smooth=0.01, num_attempts=10, n_pi_rot=10):
+def format_fd(df, k, pct_smooth=0.01, num_attempts=10, n_pi_rot=0):
     f = df.Defl.values * k
     h = (df.ZSnsr - df.Defl).values
     j0 = np.argmax(df.ZSnsr.values)
@@ -325,7 +325,7 @@ class ForceMap:
             plt.tight_layout()
             plt.show()
 
-    def ml_flatten_and_shift(self, num_features=2, order=1, show_plots=True):
+    def ml_flatten_and_shift(self, num_features=2, order=1, show_plots=False):
         '''
         kind of experimental function for flattening the height of force maps and shifting them to start at 0 height
         there are assumed to be a certain number features in an image for instance, a cell sitting atop a culture dish
