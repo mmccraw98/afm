@@ -174,6 +174,10 @@ def format_fd(df, k, pct_smooth=0.01, num_attempts=10, n_pi_rot=0):
     return pd.DataFrame({'f': abs(f), 'h': abs(h)})
 
 
+def merge_fmap_masks(maps):
+    return np.prod([m.feature_mask for m in maps], axis=0)
+
+
 class ForceMap:
 
     def __init__(self, root_directory, spring_const=None, sampling_frequency=None, probe_radius=1, contact_beta=3 / 2,

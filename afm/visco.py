@@ -42,5 +42,12 @@ def qmax(X, r, length, dt):
     :return: relaxance of a single arm maxwell model in the Z-domain along the circle of radius r (numpy array)
     '''
     Ge, G1, T1 = X
-    z = np.exp(- np.pi * 1j * np.linspace(-1, 1, length)) * r
-    return (Ge + G1) - G1 * z / (T1 / dt * z - np.exp(-dt / T1) * T1 / dt)
+    z = np.exp(np.pi * 1j * np.linspace(-1, 1, length)) * r
+    return (Ge + G1) - G1 / (1 + T1 / dt * (1 - 1 / z))
+
+def qmax_obj(X, real, r, dt, re_weight=1, im_weight=1):
+    pred = qmax(X, r, real.size, dt)
+    pred = abs(np.real(pred)) + abs(np.imag(pred)) * 1j
+    return np.sum(re_weight * abs(np.real(pred - real)) ** 2 + im_weight * abs(np.imag(pred - real)) ** 2)
+
+
