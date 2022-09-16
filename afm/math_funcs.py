@@ -1,5 +1,6 @@
 import numpy as np
-import scipy.signal as sps
+import scipy as sp
+import scipy.signal
 
 
 def sma(arr, window_size):
@@ -29,7 +30,7 @@ def norm_cross_corr(f1, f2, method = 'same'):
     :param f2: numpy array (m,) n not necessarily == m
     :return: numpy array (n,)
     '''
-    return sps.signal.correlate(f1, f2, mode=method) / np.sqrt(sps.signal.correlate(f1, f1, mode=method)[int(f1.size / 2)] * sps.signal.correlate(f2, f2, mode=method)[int(f2.size / 2)])
+    return sp.signal.correlate(f1, f2, mode=method) / np.sqrt(sp.signal.correlate(f1, f1, mode=method)[int(f1.size / 2)] * sp.signal.correlate(f2, f2, mode=method)[int(f2.size / 2)])
 
 def downsampu2v(u, v):
     '''
