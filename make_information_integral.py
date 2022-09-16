@@ -22,11 +22,13 @@ f = eps_0 * t + eps_0 * G * T * (1 - sp.exp(-t / T)) - G * t * eps_0
 offset = sp.log(2 * sp.pi * s ** 2) / 2
 L_n = - offset - (f - fp) ** 2 / (2 * s ** 2)
 L = sp.Sum(L_n, (n, 0, N))
-g_integral = sp.integrate((L_n.diff(Gp) + L_n.diff(Tp)) ** 2, (Gp, Gp_min, Gp_max))
+t_integral = sp.integrate((L_n.diff(Gp) + L_n.diff(Tp)) ** 2, (Tp, Tp_min, Tp_max))
 print('done integrating over G!')
-t_integral = sp.integrate(g_integral, (Tp, Tp_min, Tp_max))
+g_integral = sp.integrate(t_integral, (Gp, Gp_min, Gp_max))
 print('done integrating over T!')
+integral = sp.Sum(g_integral, (n, 0, N))
 with open('information_integral.pkl', 'wb') as f:
-    pickle.dump(L, t_integral)
+    pickle.dump(L, integral)
 with open('information_integral.pkl.BACK', 'wb') as f:
-    pickle.dump(L, t_integral)
+    pickle.dump(L, integral)
+    

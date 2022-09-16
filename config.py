@@ -1,0 +1,1 @@
+local_data_path = r'/home/mmccraw/Desktop/gwu/data'
