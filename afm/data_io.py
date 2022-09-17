@@ -5,6 +5,7 @@ import os
 import pickle
 from .misc import get_line_point_coords, progress_bar, get_window_size, get_elbow_min
 from .math_funcs import sma_shift
+from .ibw_formatting import format_ramplike_fd_for_z_transform
 from igor.binarywave import load as load_
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -152,30 +153,13 @@ def load(path, required_extension=None):
     return data
 
 
-def format_fd(df, k, pct_smooth=0.01, num_attempts=10, n_pi_rot=0):
-    f = df.Defl.values * k
-    h = (df.ZSnsr - df.Defl).values
-    j0 = np.argmax(df.ZSnsr.values)
-    j = np.argmax(f[: j0])
-    i0 = get_window_size(0.1, f.size)
-    offset = get_window_size(0.01, j - i0)
-    f_temp = sma_shift(f[i0: j], offset)
-    i_vals = [0]
-    for n in range(num_attempts):
-        i_vals.append(np.argmin(f_temp[i_vals[-1]:]) + i_vals[-1])
-    i = int(np.mean(i_vals[1:])) + offset
-    i += np.argmin(f[i:j])
-    win_size = get_window_size(pct_smooth, j - i)
-    f = sma_shift(f[i:j], win_size)
-    h = sma_shift(h[i:j], win_size)
-    i = get_elbow_min(h, f, np.pi * n_pi_rot)
-    f = f[i:] - f[i]
-    h = h[i:] - h[i]
-    return pd.DataFrame({'f': abs(f), 'h': abs(h)})
-
-
 def merge_fmap_masks(maps):
     return np.prod([m.feature_mask for m in maps], axis=0)
+
+
+def load_scan(path):
+    height, amplitude, phase, zsnsr = load_(path)['wave']['wData'].T
+    return {'height': height, 'amplitude': amplitude, 'phase': phase, 'zsnsr': zsnsr}
 
 
 class ForceMap:
@@ -298,14 +282,25 @@ class ForceMap:
 
         self.map_scalars.update({'MapFlattenHeight': height - np.min(height)})
 
-    def format_fds(self):
+    def format_ramplike_fds(self, n_pi_rot=0, min_size=10, pct_smooth=self.pct_smooth):
         tot = 0
         for i, row in enumerate(self.map_vectors):
             for j, df in enumerate(row):
                 tot += 1
                 progress_bar(tot, self.shape[0] * self.shape[1], message='formatting force curves')
-                self.fd_curves[i, j] = format_fd(df, self.spring_const, self.pct_smooth)
+                f = df.Defl.values * self.spring_const
+                h = (df.ZSnsr - df.Defl).values
+                z = df.ZSnsr.values                
+                self.fd_curves[i, j] = format_ramplike_fd_for_z_transform(f, 
+                                                                          h, 
+                                                                          z, 
+                                                                          n_pi_rot=n_pi_rot, 
+                                                                          min_size=min_size, 
+                                                                          pct_smooth=pct_smooth)
         print('done', end='\r')
+        
+    def keys(self):
+        return self.__dict__.keys()
 
     def cut_background(self, mult, show_plots=True):
         height_map = self.map_scalars['MapFlattenHeight'].copy()
