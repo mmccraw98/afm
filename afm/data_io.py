@@ -3,7 +3,8 @@ import pandas as pd
 from scipy.optimize import minimize
 import os
 import pickle
-from .misc import get_line_point_coords, progress_bar, get_window_size, get_elbow_min
+from .visco import mdft, get_r
+from .misc import get_line_point_coords, progress_bar, get_window_size, get_elbow_min, get_next_file_name
 from .math_funcs import sma_shift
 from .ibw_formatting import format_ramplike_fd_for_z_transform
 from igor.binarywave import load as load_
@@ -181,6 +182,7 @@ class ForceMap:
         self.y = None
         self.pct_smooth = pct_smooth
         self.feature_mask = None
+        self.spectra = None
 
         self.load_map()
 
@@ -209,6 +211,7 @@ class ForceMap:
         print('done', end='\r')
 
         self.map_vectors = np.zeros(self.shape, dtype='object')
+        self.spectra = np.zeros(self.shape, dtype='object')
         self.fd_curves = np.zeros(self.shape, dtype='object')
         self.feature_mask = np.ones(self.shape) == 1
         for i, file in enumerate(files):
@@ -225,6 +228,7 @@ class ForceMap:
         self.feature_mask = self.feature_mask.T[::-1]
         self.map_vectors = self.map_vectors.T[::-1]
         self.fd_curves = self.fd_curves.T[::-1]
+        self.spectra = self.spectra.T[::-1]
 
     def plot_map(self):
         figs, axs = plt.subplots(1, len(self.map_scalars.keys()))
@@ -282,7 +286,7 @@ class ForceMap:
 
         self.map_scalars.update({'MapFlattenHeight': height - np.min(height)})
 
-    def format_ramplike_fds(self, n_pi_rot=0, min_size=10, pct_smooth=self.pct_smooth):
+    def format_ramplike_fds(self, n_pi_rot=0, min_size=10):
         tot = 0
         for i, row in enumerate(self.map_vectors):
             for j, df in enumerate(row):
@@ -296,7 +300,7 @@ class ForceMap:
                                                                           z, 
                                                                           n_pi_rot=n_pi_rot, 
                                                                           min_size=min_size, 
-                                                                          pct_smooth=pct_smooth)
+                                                                          pct_smooth=self.pct_smooth)
         print('done', end='\r')
         
     def keys(self):
@@ -385,7 +389,16 @@ class ForceMap:
 
     def copy(self):
         return deepcopy(self)
-
+    
+    def save(self, path):
+        path = get_next_file_name(path)
+        with open(path, 'wb') as f:
+            pickle.dump(self, f)
+            
     # TODO thin sample correction
 
     # TODO tilted sample correction
+    
+def load_fmap_object(path):
+    with open(path, 'rb') as f:
+        return pickle.load(f)
