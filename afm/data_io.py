@@ -5,8 +5,8 @@ import os
 import pickle
 from .visco import mdft, get_r
 from .misc import get_line_point_coords, progress_bar, get_window_size, get_elbow_min, get_next_file_name
-from .math_funcs import sma_shift
-from .ibw_formatting import format_ramplike_fd_for_z_transform
+from .math_funcs import sma_shift, sma
+from .ibw_formatting import format_ramplike_fd_for_z_transform, get_f_h_z, get_contact_points
 from igor.binarywave import load as load_
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -286,21 +286,28 @@ class ForceMap:
 
         self.map_scalars.update({'MapFlattenHeight': height - np.min(height)})
 
-    def format_ramplike_fds(self, n_pi_rot=0, min_size=10):
+    def format_ramplike_fds(self, pct_smooth=0.05, pct_cut_down=0.1):
         tot = 0
+        i_min = np.zeros(self.shape)
+        j_max = np.zeros(self.shape)
         for i, row in enumerate(self.map_vectors):
             for j, df in enumerate(row):
                 tot += 1
                 progress_bar(tot, self.shape[0] * self.shape[1], message='formatting force curves')
-                f = df.Defl.values * self.spring_const
-                h = (df.ZSnsr - df.Defl).values
-                z = df.ZSnsr.values                
-                self.fd_curves[i, j] = format_ramplike_fd_for_z_transform(f, 
-                                                                          h, 
-                                                                          z, 
-                                                                          n_pi_rot=n_pi_rot, 
-                                                                          min_size=min_size, 
-                                                                          pct_smooth=self.pct_smooth)
+                f, h, z = get_f_h_z(df, self.spring_const)
+                I, J = get_contact_points(f, h, z)
+                i_min[i, j] = I
+                j_max[i, j] = J
+                J -= int((J - I) * pct_cut_down)
+                win_size = int((J - I) * pct_smooth)
+                f = f[I: J]
+                h = h[I: J]
+                if win_size > 1:
+                    f = sma(f, win_size)
+                    h = sma(h, win_size)
+                f = abs(f - f[0])
+                h = abs(h - h[0])
+                self.fd_curves[i, j] = pd.DataFrame({'f': f, 'h': h})
         print('done', end='\r')
         
     def keys(self):
