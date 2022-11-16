@@ -394,3 +394,33 @@ class ForceMap:
     # TODO thin sample correction
 
     # TODO tilted sample correction
+
+
+def offset_polynom(x, y_offset, x_offset, slope):
+    # model of an offset polynomial with power 2 (3/2 doesn't seem to work!)
+    poly = 2
+    d = x - x_offset
+    return slope * (abs(d) - d) ** poly + y_offset
+
+def fit_contact(df, k):
+    # fit QUADRATIC f-z model to data and return contact location and index
+    # format f-d dataframe values and cut to maximum
+    f = df.Defl.values * k
+    i = np.argmax(f)
+    z_tip = (df.Defl - df.ZSnsr).values[:i]
+    f = f[:i]
+
+    # normalize f-d values
+    x = z_tip - z_tip[0]
+    x /= max(abs(x))
+    y = f - f[0]
+    y /= max(abs(f))
+
+    # fit to the offset polynomial model
+    X, _ = curve_fit(offset_polynom, x, y)
+    y_offset, x_offset, slope = X
+
+    # reverse the normalization and get index
+    z_offset = x_offset * max(abs(z_tip - z_tip[0])) + z_tip[0]
+    j = np.argmin((z_tip - z_offset) ** 2)
+    return z_offset, j
