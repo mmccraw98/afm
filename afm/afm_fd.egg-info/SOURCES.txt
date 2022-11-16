@@ -1,0 +1,9 @@
+LICENSE.txt
+pyproject.toml
+setup.cfg
+setup.py
+afm/afm_fd.egg-info/PKG-INFO
+afm/afm_fd.egg-info/SOURCES.txt
+afm/afm_fd.egg-info/dependency_links.txt
+afm/afm_fd.egg-info/requires.txt
+afm/afm_fd.egg-info/top_level.txt

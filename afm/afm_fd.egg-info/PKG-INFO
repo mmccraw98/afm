@@ -1,0 +1,12 @@
+Metadata-Version: 2.1
+Name: afm-fd
+Version: 1.0.0
+Summary: tools for afm - mostly force spectroscopy
+Home-page: https://github.com/mmccraw98/afm
+Author: marshall mccraw
+Author-email: mmccraw98@gmail.com
+Keywords: atomicforcemicroscopy,afm,physics,data
+Requires-Python: >=3.7, <4
+Provides-Extra: dev
+Provides-Extra: test
+License-File: LICENSE.txt

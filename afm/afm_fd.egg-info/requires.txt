@@ -1,0 +1,11 @@
+igor
+numpy
+matplotlib
+pandas
+scipy
+
+[dev]
+check-manifest
+
+[test]
+coverage
