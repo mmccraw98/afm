@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
+from scipy.optimize import minimize, curve_fit
 import os
 import pickle
 from .misc import get_line_point_coords, progress_bar, get_window_size, get_elbow_min
