@@ -64,3 +64,19 @@ def scale(arr):
 def get_elbow_min(arr_x, arr_y, angle):
     data = rotate_vector(np.concatenate((scale(arr_x).reshape(-1, 1), scale(arr_y).reshape(-1, 1)), axis=1), angle)
     return np.argmin(data[:, 1])
+
+
+def simple_suffix_string(suffix_numeric):
+    if suffix_numeric == 0:
+        return ''
+    else:
+        return str(suffix_numeric)
+
+
+def get_next_file_name(path):
+    mod_path, ext = os.path.splitext(path)
+    i = 0
+    while os.path.exists(new_path := mod_path + simple_suffix_string(i) + ext):
+        i += 1
+    return new_path
+
