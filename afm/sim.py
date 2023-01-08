@@ -128,6 +128,9 @@ class sim_rajabifar_1():
         self.inden = None
         self.force_rep = None
         self.viscoelastic = None
+        self.E0 = None
+        self.Einf = None
+        self.Tau = None
 
     def rhs_vdw_sls(self, state, E0, Einf, Tau, viscoelastic):
         '''
@@ -165,6 +168,9 @@ class sim_rajabifar_1():
         self.tip_pos = np.zeros(self.nt)
         self.time = np.zeros(self.nt)
         self.viscoelastic = viscoelastic
+        self.E0 = E0
+        self.Einf = Einf
+        self.Tau = Tau
 
         h0 = self.h0
         u = np.zeros(self.r.shape)
