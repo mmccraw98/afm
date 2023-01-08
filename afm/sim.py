@@ -98,7 +98,7 @@ def rk4(state, dt, rhs_func, *args):
 
 
 class sim_rajabifar_1():
-    def __init__(self, v0, h0, R, nr=1000, dr=1.5e-9, dt=1e-4, nt=1e6):
+    def __init__(self, v0, h0, R, nr=1000, dr=1.5e-9, dt=1e-4, nt=int(1e6)):
         '''
         create an instance of Rajabifar's 'exact' approach to solving the Attard equation as outlined here:
         Dynamic AFM on Viscoelastic Polymer Samples with Surface Forces - Bahram Rajabifar
