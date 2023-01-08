@@ -169,8 +169,7 @@ class sim_rajabifar_1():
         state = np.array([u, h0], dtype='object')
         print(' % |  z_tip  |  z_target |  force  |  force_target')
         for n in range(self.nt):
-            state = rk4(state, self.dt, self.rhs_vdw_sls, self.r, self.dr, self.R, self.k_ij,
-                        E0, Einf, Tau, viscoelastic)
+            state = rk4(state, self.dt, self.rhs_vdw_sls, E0, Einf, Tau, viscoelastic)
             u, h0 = state
             h = h_calc(h0, u, f_sphere, self.r, self.R)
             p, p_h = p_vdw(h)
