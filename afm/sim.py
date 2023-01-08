@@ -69,7 +69,7 @@ def h_calc(h0, u, f_tip, r, *args):
     return h0 + f_tip(r, *args) - u
 
 
-def p_vdw(h, H=1e-19, z0=1e-9):
+def p_vdw(h, H1=1e-19, H2=1e-19, z0=1e-9):
     '''
     calculates the van der Waals pressure and derivative as a function of distance
     :param h: (float or numpy array) distance between bodies
@@ -77,8 +77,8 @@ def p_vdw(h, H=1e-19, z0=1e-9):
     :param z0: (float) equilibrium separation distance
     :return: (float or numpy array x2) pressure, derivative of pressure with respect to distance
     '''
-    return (H / (6 * np.pi * h ** 3) * ((z0 / h) ** 6 - 1),
-            H / (2 * np.pi * h ** 4) * (1 - 3 * (z0 / h) ** 6))
+    return (1 / (6 * np.pi * h ** 3) * (H1 * (z0 / h) ** 6 - H2),
+            1 / (2 * np.pi * h ** 4) * (H2 - 3 * H1(z0 / h) ** 6))
 
 
 def rk4(state, dt, rhs_func, *args):
@@ -131,6 +131,9 @@ class sim_rajabifar_1():
         self.E0 = None
         self.Einf = None
         self.Tau = None
+        self.H1 = None
+        self.H2 = None
+        self.z0 = None
 
     def rhs_vdw_sls(self, state, E0, Einf, Tau, viscoelastic):
         '''
@@ -141,7 +144,7 @@ class sim_rajabifar_1():
         '''
         u, h0 = state  # unpack state vector
         h = h_calc(h0, u, f_sphere, self.r, self.R)  # calculate the separation for the spherical indenter
-        p, p_h = p_vdw(h)  # calculate the vdW pressure
+        p, p_h = p_vdw(h, H1=self.H1, H2=self.H2, z0=self.z0)  # calculate the vdW pressure
         J_ij = 1 / E0 * self.k_ij * self.dr * p_h * self.r - self.I  # calculate the LHS matrix J_ij
         b_i = 1 / E0 * self.dr * self.v0 * (p_h * self.r) @ self.k_ij  # calculate the RHS vector b_i
         if viscoelastic:  # introduce viscoelastic relaxation of SLS material
@@ -150,7 +153,7 @@ class sim_rajabifar_1():
         u_dot = np.linalg.solve(J_ij, b_i)  # invert governing matrix eqn to find u_dot_i directly
         return np.array([u_dot, self.v0], dtype='object')
 
-    def simulate(self, E0, Einf, Tau, viscoelastic, force_target, depth_ratio_target=0.1):
+    def simulate(self, E0, Einf, Tau, viscoelastic, force_target, depth_ratio_target=0.1, H1=1e-19, H2=1e-19, z0=1e-9):
         '''
         :param E0: (float) normalized instantaneous modulus (Pa) E0 / (1 - v^2)
         :param Einf: (float) normalized equilibrium modulus (Pa) Einf / (1 - v^2)
@@ -171,6 +174,9 @@ class sim_rajabifar_1():
         self.E0 = E0
         self.Einf = Einf
         self.Tau = Tau
+        self.H1 = H1
+        self.H2 = H2
+        self.z0 = z0
 
         h0 = self.h0
         u = np.zeros(self.r.shape)
