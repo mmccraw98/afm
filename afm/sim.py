@@ -211,4 +211,4 @@ class sim_rajabifar_1():
         data = {'df': df, 'v0': self.v0, 'viscoelastic': self.viscoelastic, 'R': self.R, 'dr': self.dr,
                 'nr': self.nr, 'E0': self.E0, 'Einf': self.Einf, 'Tau': self.Tau}
         with open(next_path(saveroot + savename + '-%s.sim'), 'wb') as f:
-            pickle.dump(data)
+            pickle.dump(data, f)
