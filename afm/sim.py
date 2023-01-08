@@ -78,7 +78,7 @@ def p_vdw(h, H1=1e-19, H2=1e-19, z0=1e-9):
     :return: (float or numpy array x2) pressure, derivative of pressure with respect to distance
     '''
     return (1 / (6 * np.pi * h ** 3) * (H1 * (z0 / h) ** 6 - H2),
-            1 / (2 * np.pi * h ** 4) * (H2 - 3 * H1(z0 / h) ** 6))
+            1 / (2 * np.pi * h ** 4) * (H2 - 3 * H1 * (z0 / h) ** 6))
 
 
 def rk4(state, dt, rhs_func, *args):
