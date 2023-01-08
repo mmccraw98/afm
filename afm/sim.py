@@ -182,17 +182,17 @@ class sim_rajabifar_1():
                                                                                   self.tip_pos[n] * 1e9, pos_target * 1e9,
                                                                                   self.force[n] * 1e9, force_target * 1e9))
             if self.force[n] > force_target or self.tip_pos[n] < pos_target:
-                force = self.force[:n]
-                separation = self.separation[:n]
-                tip_pos = self.tip_pos[:n]
-                time = self.time[:n]
+                self.force = self.force[:n]
+                self.separation = self.separation[:n]
+                self.tip_pos = self.tip_pos[:n]
+                self.time = self.time[:n]
                 break
         print('done!')
-        self.inden = np.zeros(time.size)
-        contact_index = np.argmin(force)
-        self.inden[contact_index:] = tip_pos[contact_index] - tip_pos[contact_index:]
-        self.force_rep = np.zeros(time.size)
-        self.force_rep[contact_index:] = force[contact_index:] - force[contact_index]
+        self.inden = np.zeros(self.time.size)
+        contact_index = np.argmin(self.force)
+        self.inden[contact_index:] = self.tip_pos[contact_index] - self.tip_pos[contact_index:]
+        self.force_rep = np.zeros(self.time.size)
+        self.force_rep[contact_index:] = self.force[contact_index:] - self.force[contact_index]
 
     def save(self, savename):
         if self.force is None:
