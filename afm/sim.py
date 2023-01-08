@@ -186,7 +186,7 @@ class sim_rajabifar_1():
             state = rk4(state, self.dt, self.rhs_vdw_sls, E0, Einf, Tau, viscoelastic)
             u, h0 = state
             h = h_calc(h0, u, f_sphere, self.r, self.R)
-            p, p_h = p_vdw(h)
+            p, p_h = p_vdw(h, H1=self.H1, H2=self.H2, z0=self.z0)
             self.force[n] = (2 * np.pi * p @ self.r * self.dr)
             self.separation[n] = h[0]
             self.tip_pos[n] = h0
