@@ -5,6 +5,38 @@ import pandas as pd
 import pickle
 
 
+def hertzian(inden, E, v, R):
+    '''
+    calculate hertzian (elastic) contact force
+    :param inden: float indentation depth
+    :param E: float shear modulus
+    :param v: float poissons ratio
+    :param R: float indenter radius
+    :return: float force
+    '''
+    return 4 / 3 * np.sqrt(R) * E / (1 - v ** 2) * inden ** 1.5
+
+def lee_radok(inden, v, R, Gg, Ge, Tau, t):
+    '''
+    calculate lee and radok (viscoelastic) contact force
+    :param inden: float indentation depth
+    :param v: float poissons ratio
+    :param R: float indenter radius
+    :param Gg: float instantaneous shear modulus
+    :param Ge: float equilibrium shear modulus
+    :param Tau: float relaxation time
+    :param t: float time axis
+    :return: float force
+    '''
+    dt = t[1] - t[0]
+    G = Gg - Ge
+    if G < 0:
+        print('invalid moduli')
+    exp = np.exp(-t / Tau)
+    a = 4 * np.sqrt(R) / (3 * (1 - v ** 2))
+    H = inden ** 1.5
+    return a * (Gg * H - G / Tau * np.convolve(exp, H, 'full')[: t.size] * dt)
+
 def In_L(r_n, dr):
     '''
     using: Interaction and Deformation of Elastic Bodies: Origin of Adhesion Hysteresis - Phil Attard
