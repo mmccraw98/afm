@@ -169,7 +169,9 @@ def p_degennes(h, L0=2e-6, N=3e14, T=300, H_rep=1e-19, z0=0.5e-9):
     C = kb * T * L0 * N ** (3 / 2)
 
     P = 2 * C * (L0 ** (5 / 4) * h ** (-9 / 4) - L0 ** (-7 / 4) * h ** (3 / 4))
+    P[P < 0] = 0
     Ph = - C / 2 * (3 * L0 ** (-7 / 4) * h ** (-1 / 4) + 9 * L0 ** (5 / 4) * h ** (-13 / 4))
+    Ph[Ph > 0] = 0
 
     p_hw, ph_hw = p_vdw(h, H1=H_rep, H2=0, z0=z0)
     return (P + p_hw, Ph + ph_hw)
