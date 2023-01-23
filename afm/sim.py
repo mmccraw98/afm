@@ -151,6 +151,29 @@ def p_exp_and_rep(h, magnitude=1e7, decay_length=1e-9, H_rep=1e-19, z0=0.5e-9):
     return (p1 + p2,
             ph1 + ph2)
 
+
+def p_degennes(h, L0=2e-6, N=3e14, T=300, H_rep=1e-19, z0=0.5e-9):
+    '''
+    de-gennes grafted polymer repulsive pressure superposed with a hard-wall repulsion
+    coefficients taken from sokolov (experiments on cells): https://doi.org/10.1063/1.2757104
+    model derived using Surface and Interaction Forces 2ed (pp. 341)
+    :param h: float separation between ungrafted surface and grafted surface
+    :param L0: float polymer equilibrium length (sokolov reports 2 microns on average)
+    :param N: float polymer grafting density (sokolov reports about 300 polymers per square micron)
+    :param T: float temperature
+    :param H_rep: float hard-wall repulsion magnitude
+    :param z0: float hard-wall repulsion distance
+    :return: (float, float) pressure and pressure derivative
+    '''
+    kb = 1.38e-23
+    C = kb * T * L0 * N ** (3 / 2)
+
+    P = 2 * C * (L0 ** (5 / 4) * h ** (-9 / 4) - L0 ** (-7 / 4) * h ** (3 / 4))
+    Ph = - C / 2 * (3 * L0 ** (-7 / 4) * h ** (-1 / 4) + 9 * L0 ** (5 / 4) * h ** (-13 / 4))
+
+    p_hw, ph_hw = p_vdw(h, H1=H_rep, H2=0, z0=z0)
+    return (P + p_hw, Ph + ph_hw)
+
 def rk4(state, dt, rhs_func, *args):
     '''
     Runge Kutta 4th order time integration update scheme
@@ -309,6 +332,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
 
     print('b1 | b0 | c1 | c0')
     print(b1, b0, c1, c0)
+    print('max. r: {}'.format(max(r)))
 
     # calculate exact position target
     pos_target = R * Zr_target
