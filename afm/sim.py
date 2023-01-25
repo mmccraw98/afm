@@ -293,6 +293,31 @@ def get_coefs_gkv(Jg, Je, Tau, v):
     return Tau, 1, (1 - v ** 2) * Jg, (1 - v ** 2) * Je
 
 
+def get_explicit_sim_arguments(l, f, rho_c, R, G_star, N_R, H_R_target=0.1, F_target=1):
+    '''
+    calculate the explicit arguments for simulate_rigid_N1 given the dimensionless quantities l and f
+    using the dimension of R (probe radius), G_star (reduced shear modulus)
+    :param l: float (1e-2 to 1e3, theoretically also to inf) dimensionless length scale l=(Rh')^1/2
+    :param f: float (theoretically from 0, 1e-10 to 1e6) dimensionless pressure scale f=P0/G*
+    :param rho_c: float (usually 1 to 10) dimensionless maximum radial distance in discrete domain
+    :param R: float probe radius in m
+    :param G_star: float reduced shear modulus in Pa (G*=G/(1-v^2))
+    :param N_R: int number of points in discrete domain
+    :param H_R_target: float (-inf, inf) target probe position as a ratio of probe radius
+    :param F_target: float (0, inf) ratio of theoretical hertz force obtained at maximum indentation (usually >1)
+    :return:
+    '''
+    r_c = rho_c * l * R
+    d_r = r_c / N_R
+    P_magnitude = f * G_star
+    decay_constant = R / l ** 2
+    pos_target = R * H_R_target
+    # estimate the maximum force as a ratio of the maximum hertzian force
+    force_target = abs(pos_target) ** 1.5 * G_star * R ** 0.5 * F_target
+    return r_c, d_r, P_magnitude, decay_constant, pos_target, force_target
+
+
+
 def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
              nr=int(1e3), dr=1.5e-9,
              dt=1e-4, nt=int(1e6),
