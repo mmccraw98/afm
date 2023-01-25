@@ -296,7 +296,7 @@ def get_coefs_gkv(Jg, Je, Tau, v):
 def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
              nr=int(1e3), dr=1.5e-9,
              dt=1e-4, nt=int(1e6),
-             force_target=1e-6, Zr_target=-0.1):
+             force_target=1e-6, pos_target=-1e-8):
     '''
     integrate the interaction of the probe (connected to a rigid cantilever) with a sample defined by a viscoelastic
     ODE of maximum order N=1, using RK4 time integration
@@ -314,7 +314,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     :param dt: float temporal discretization
     :param nt: int number of time discretization points
     :param force_target: float maximum force in simulation
-    :param Zr_target: float target position of probe as a ratio of the probe radius
+    :param pos_target: float target position of probe
     :return: data dict containing sim dataframe and sim parameters
     '''
     saved_args = locals()  # save all function arguments for later
@@ -335,9 +335,6 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     print('b1 | b0 | c1 | c0')
     print(b1, b0, c1, c0)
     print('max. r: {}'.format(max(r)))
-
-    # calculate exact position target
-    pos_target = R * Zr_target
 
     # make loggers
     force = np.zeros(nt)
