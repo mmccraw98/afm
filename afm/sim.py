@@ -321,7 +321,7 @@ def get_explicit_sim_arguments(l, f, rho_c, R, G_star, N_R, H_R_target=-0.1, F_t
 def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
              nr=int(1e3), dr=1.5e-9,
              dt=1e-4, nt=int(1e6),
-             force_target=1e-6, pos_target=-1e-8):
+             force_target=1e-6, pos_target=-1e-8, pct_log=0.0001):
     '''
     integrate the interaction of the probe (connected to a rigid cantilever) with a sample defined by a viscoelastic
     ODE of maximum order N=1, using RK4 time integration
@@ -340,6 +340,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     :param nt: int number of time discretization points
     :param force_target: float maximum force in simulation
     :param pos_target: float target position of probe
+    :param pct_log: float percentage of sim steps to log sim state to console
     :return: data dict containing sim dataframe and sim parameters
     '''
     saved_args = locals()  # save all function arguments for later
@@ -366,6 +367,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     separation = np.zeros(nt)
     tip_pos = np.zeros(nt)
     time = np.zeros(nt)
+    u_inf = np.zeros(nt)
 
     # run simulation
     print(' % |  z_tip  |  z_target |  force  |  force_target  |  u(inf,t)')
@@ -380,7 +382,8 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
         separation[n] = h[0]
         tip_pos[n] = h0
         time[n] = n * dt
-        if n % (0.001 * nt) == 0:
+        u_inf[n] = u[-1]
+        if n % (pct_log * nt) == 0:
             print('{} | {:.1f} nm | {:.1f} nm | {:.1f} nN | {:.1f} nN | {:.1f} nm'.format(
                 n / nt, tip_pos[n] * 1e9, pos_target * 1e9, force[n] * 1e9,
                 force_target * 1e9, u[-1] * 1e9))
@@ -392,6 +395,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
             separation = separation[:n + 1]
             tip_pos = tip_pos[:n + 1]
             time = time[:n + 1]
+            u_inf = u_inf[:n + 1]
             break
     print('done!')
     # save sim data
@@ -402,6 +406,6 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     force_rep[contact_index:] = force[contact_index:] - force[contact_index]
     df = pd.DataFrame({'time': time, 'separation': separation, 'tip_pos': tip_pos,
                        'force': force, 'inden': inden, 'force_rep': force_rep,
-                       'deformation': separation - tip_pos})
+                       'deformation': separation - tip_pos, 'u_inf': u_inf})
     data = {'df': df, 'sim_arguments': saved_args}
     return data
