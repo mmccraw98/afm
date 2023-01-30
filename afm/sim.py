@@ -307,7 +307,7 @@ def get_explicit_sim_arguments(l, f, rho_c, R, G_star, N_R, H_R_target=-0.1, F_t
     :param F_target: float (0, inf) ratio of theoretical hertz force obtained at maximum indentation (usually >1)
     :return:
     '''
-    r_c = rho_c * l * R
+    r_c = rho_c * R / l
     d_r = r_c / N_R
     P_magnitude = f * G_star
     decay_constant = R / l ** 2
