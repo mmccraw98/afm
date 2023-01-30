@@ -1,9 +1,7 @@
 import numpy as np
-from scipy.special import ellipk, jv
-from afm.data_io import next_path
+from scipy.special import ellipk
 import pandas as pd
-import pickle
-
+import torch
 
 def hertzian(inden, E, v, R):
     '''
@@ -221,6 +219,39 @@ def rhs_N_1_rigid(state, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args):
     u_dot = np.linalg.solve(G_ij, d_j)  # solve the system of equations
     return np.array([u_dot, v0], dtype='object')
 
+def rhs_N_1_rigid_cuda(state, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args):
+    '''
+    calculates the derivative of the state vector (surface deformation and probe position) assuming that the
+    probe position is prescribed by a time dependent velocity v0(t) (i.e. by a rigid cantilever)
+    also assuming that the viscoelastic ODE is order N=1
+    ASSUMES VARIABLES ARE TORCH TENSORS
+    :param state: numpy array state vector (deformation, probe position)
+    :param r: float radial spatial axis
+    :param dr: float spatial discretization
+    :param R: float spherical probe radius
+    :param k_ij: numpy matrix (nr x nr) integrating kernel
+    :param I: numpy matrix (nr x nr) identity matrix
+    :param v0: float time dependent prescribed velocity of the probe
+    :param b1: float viscoelastic coefficient b1
+    :param b0: float viscoelastic coefficient b0
+    :param c1: float viscoelastic coefficient c1
+    :param c0: float viscoelastic coefficient c0
+    :param p_func: function for calculating sphere-point pressure distribution p_func(h, *args)
+    :param args: optional arguments for p_func
+    :return: numpy array derivative of state vector (deformation rate, probe velocity)
+    '''
+    u = state[:, 0]  # unpack the state vector
+    h0 = state[:, 1]  # unpack the state vector
+    h = h_calc(h0, u, f_sphere, r, R)  # calculate the separation
+    p, p_h = p_vdw(h)  # calculate the pressure and derivative
+    # calculate LHS G matrix
+    G_ij = c1 * dr * k_ij * p_h * r - b1 * I
+    # calculate RHS vectors, d_j
+    d_j = c1 * v0 * dr * k_ij @ (p_h * r) + c0 * dr * k_ij @ (p * r) + b0 * u
+    u_dot = torch.linalg.solve(G_ij, d_j)  # solve the system of equations
+    return torch.cat((torch.reshape(u_dot, v0.shape), v0), 1)
+
+
 def get_coefs_rajabifar(Gg, Ge, Tau, v):
     '''
     get viscoelastic ODE coefficients in the style of Rajabifar and Attard
@@ -319,9 +350,10 @@ def get_explicit_sim_arguments(l, f, rho_c, R, G_star, N_R, H_R_target=-0.1, F_t
 
 
 def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
-             nr=int(1e3), dr=1.5e-9,
-             dt=1e-4, nt=int(1e6),
-             force_target=1e-6, pos_target=-1e-8, pct_log=0.0001):
+                      nr=int(1e3), dr=1.5e-9,
+                      dt=1e-4, nt=int(1e6),
+                      force_target=1e-6, pos_target=-1e-8, pct_log=0.0001, use_cuda=False,
+                      remesh=False, u_tol=1e-9, remesh_factor=1.01):
     '''
     integrate the interaction of the probe (connected to a rigid cantilever) with a sample defined by a viscoelastic
     ODE of maximum order N=1, using RK4 time integration
@@ -341,9 +373,15 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     :param force_target: float maximum force in simulation
     :param pos_target: float target position of probe
     :param pct_log: float percentage of sim steps to log sim state to console
+    :param use_cuda: bool whether to use CUDA cores for calculation acceleration (nearly 1 order of magnitude
+    compared against numpy.linalg.solve)
+    :param remesh: bool whether to remesh the domain
+    :param u_tol: tolerance for the 'infinite' displacement value
+    :param remesh_factor: float how large the domain will expand if remeshing
     :return: data dict containing sim dataframe and sim parameters
     '''
     saved_args = locals()  # save all function arguments for later
+
     # discretize domain
     r = np.linspace(1, nr, nr) * dr
     # calculate integrating kernels
@@ -351,6 +389,22 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     I = np.eye(r.size)  # make identity matrix
     u = np.zeros(r.shape)  # initialize deformation
     state = np.array([u, h0], dtype='object')  # make state vector
+
+    if use_cuda and torch.cuda.is_available():
+        print('Solving on GPU:')
+        print(torch.cuda.get_device_name(0))
+        torch.set_default_tensor_type(torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor)
+        r = torch.linspace(1, nr, nr, device='cuda') * dr
+        k = torch.zeros([nr, nr], device='cuda')
+        for i, row in enumerate(k_ij):
+            for j, K_IJ in enumerate(row):
+                k[i, j] += K_IJ
+        k_ij = k
+        I = torch.eye(nr, device='cuda')
+        u = torch.zeros([nr, 1], device='cuda')
+        h0 = torch.ones([nr, 1], device='cuda') * h0
+        v0 = torch.ones([nr, 1], device='cuda') * v0
+        state = torch.cat((u, h0), 1)
 
     # get generalized viscoelastic coefficients
     if Ge == 0 and Tau == 0:
@@ -373,8 +427,13 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     print(' % |  z_tip  |  z_target |  force  |  force_target  |  u(inf,t)')
     for n in range(nt):
         # update the state according to rk4 integration
-        state = rk4(state, dt, rhs_N_1_rigid, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
-        u, h0 = state  # get the state variables
+        if use_cuda:  # need to benchmark this
+            state = rk4(state, dt, rhs_N_1_rigid_cuda, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
+            u = state[:, 0].cpu().numpy()
+            h0 = state[:, 1].cpu().numpy()
+        else:
+            state = rk4(state, dt, rhs_N_1_rigid, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
+            u, h0 = state  # get the state variables
         h = h_calc(h0, u, f_sphere, r, R)  # calculate the separation between the probe and the sample
         p, p_h = p_func(h, *args)  # calculate the pressure distribution
         force[n] = (2 * np.pi * p @ r * dr)  # calculate the force
@@ -397,6 +456,33 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
             time = time[:n + 1]
             u_inf = u_inf[:n + 1]
             break
+        if remesh and abs(u[-1]) > u_tol:
+            # remake domain
+            print(max(r))
+            dr *= remesh_factor
+            # discretize domain
+            r = np.linspace(1, nr, nr) * dr
+            print(max(r))
+            # calculate integrating kernels
+            k_ij = np.array([K(r_, r, dr) for r_ in r])
+            I = np.eye(r.size)  # make identity matrix
+            u = np.zeros(r.shape)  # initialize deformation
+            state = np.array([u, h0], dtype='object')  # make state vector
+            if use_cuda and torch.cuda.is_available():
+                torch.set_default_tensor_type(
+                    torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor)
+                r = torch.linspace(1, nr, nr, device='cuda') * dr
+                k = torch.zeros([nr, nr], device='cuda')
+                for i, row in enumerate(k_ij):
+                    for j, K_IJ in enumerate(row):
+                        k[i, j] += K_IJ
+                k_ij = k
+                I = torch.eye(nr, device='cuda')
+                u = torch.zeros([nr, 1], device='cuda')
+                h0 = torch.ones([nr, 1], device='cuda') * h0
+                v0 = torch.ones([nr, 1], device='cuda') * v0
+                state = torch.cat((u, h0), 1)
+
     print('done!')
     # save sim data
     inden = np.zeros(time.size)
