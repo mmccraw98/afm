@@ -397,6 +397,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
         print(torch.cuda.get_device_name(0))
         torch.set_default_tensor_type(torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor)
         r = torch.linspace(1, nr, nr, device='cuda') * dr
+        # TODO: there is a lot of computational overhead in making the cuda version of k_ij, should be fixed easily
         k = torch.zeros([nr, nr], device='cuda')
         for i, row in enumerate(k_ij):
             for j, K_IJ in enumerate(row):
