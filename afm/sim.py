@@ -2,6 +2,7 @@ import numpy as np
 from scipy.special import ellipk
 import pandas as pd
 import torch
+import time as time_
 
 def hertzian(inden, E, v, R):
     '''
@@ -180,14 +181,15 @@ def rk4(state, dt, rhs_func, *args):
     :param state: (numpy array) variables to integrate
     :param dt: (float) time discretization
     :param rhs_func: function to calculate the time derivatives of the state of form rhs_func(state, *args)
+    returns (time derivative of state vector, (extra stuff))
     :param args: (optional) arguments for the rhs_func
-    :return: (numpy array) integrated state at t=t+dt
+    :return: (numpy array) integrated state at t=t+dt, (extra stuff calculated at final step)
     '''
-    k1 = rhs_func(state, *args)
-    k2 = rhs_func(state + dt * k1 / 2, *args)
-    k3 = rhs_func(state + dt * k2 / 2, *args)
-    k4 = rhs_func(state + dt * k3, *args)
-    return state + (k1 + 2 * k2 + 2 * k3 + k4) * dt / 6
+    k1, _ = rhs_func(state, *args)
+    k2, _ = rhs_func(state + dt * k1 / 2, *args)
+    k3, _ = rhs_func(state + dt * k2 / 2, *args)
+    k4, extra = rhs_func(state + dt * k3, *args)
+    return state + (k1 + 2 * k2 + 2 * k3 + k4) * dt / 6, extra
 
 def rhs_N_1_rigid(state, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args):
     '''
@@ -217,7 +219,7 @@ def rhs_N_1_rigid(state, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args):
     # calculate RHS vectors, d_j
     d_j = c1 * v0 * dr * (p_h * r) @ k_ij + c0 * dr * (p * r) @ k_ij + b0 * u
     u_dot = np.linalg.solve(G_ij, d_j)  # solve the system of equations
-    return np.array([u_dot, v0], dtype='object')
+    return np.array([u_dot, v0], dtype='object'), (p, h)
 
 def rhs_N_1_rigid_cuda(state, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args):
     '''
@@ -243,13 +245,13 @@ def rhs_N_1_rigid_cuda(state, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *ar
     u = state[:, 0]  # unpack the state vector
     h0 = state[:, 1]  # unpack the state vector
     h = h_calc(h0, u, f_sphere, r, R)  # calculate the separation
-    p, p_h = p_vdw(h)  # calculate the pressure and derivative
+    p, p_h = p_func(h, *args)  # calculate the pressure and derivative
     # calculate LHS G matrix
     G_ij = c1 * dr * k_ij * p_h * r - b1 * I
     # calculate RHS vectors, d_j
     d_j = c1 * v0 * dr * k_ij @ (p_h * r) + c0 * dr * k_ij @ (p * r) + b0 * u
     u_dot = torch.linalg.solve(G_ij, d_j)  # solve the system of equations
-    return torch.cat((torch.reshape(u_dot, v0.shape), v0), 1)
+    return torch.cat((torch.reshape(u_dot, v0.shape), v0), 1), (p, h)
 
 
 def get_coefs_rajabifar(Gg, Ge, Tau, v):
@@ -425,17 +427,16 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
 
     # run simulation
     print(' % |  z_tip  |  z_target |  force  |  force_target  |  u(inf,t)')
+    start = time_.time()
     for n in range(nt):
         # update the state according to rk4 integration
         if use_cuda:  # need to benchmark this
-            state = rk4(state, dt, rhs_N_1_rigid_cuda, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
+            state, (p, h) = rk4(state, dt, rhs_N_1_rigid_cuda, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
             u = state[:, 0].cpu().numpy()
-            h0 = state[:, 1].cpu().numpy()
+            h0 = state[:, 1].cpu().numpy()[0]
         else:
-            state = rk4(state, dt, rhs_N_1_rigid, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
-            u, h0 = state  # get the state variables
-        h = h_calc(h0, u, f_sphere, r, R)  # calculate the separation between the probe and the sample
-        p, p_h = p_func(h, *args)  # calculate the pressure distribution
+            state, (p, h) = rk4(state, dt, rhs_N_1_rigid, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
+            u, h0 = state
         force[n] = (2 * np.pi * p @ r * dr)  # calculate the force
         # log
         separation[n] = h[0]
@@ -468,6 +469,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
             I = np.eye(r.size)  # make identity matrix
             u = np.zeros(r.shape)  # initialize deformation
             state = np.array([u, h0], dtype='object')  # make state vector
+            print('this is the issue, in the line above.  u needs to be properly defined using the previous values')
             if use_cuda and torch.cuda.is_available():
                 torch.set_default_tensor_type(
                     torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor)
@@ -483,7 +485,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
                 v0 = torch.ones([nr, 1], device='cuda') * v0
                 state = torch.cat((u, h0), 1)
 
-    print('done!')
+    print('done in {:.0f}s'.format(time_.time() - start))
     # save sim data
     inden = np.zeros(time.size)
     contact_index = np.argmin(force)
