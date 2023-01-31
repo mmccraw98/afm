@@ -135,6 +135,18 @@ def p_exp(h, magnitude=1e7, decay_length=1e-9):
     '''
     return (magnitude * np.exp(- h / decay_length),
             - magnitude / decay_length * np.exp(- h / decay_length))
+
+def p_exp_TORCH(h, magnitude=1e7, decay_length=1e-9):
+    '''
+    calculates an exponential repulsive potential distribution (cannot generally be used on its own)
+    FOR PYTORCH TENSORS
+    :param h: float distance between bodies
+    :param magnitude: float magnitude of repulsive force at 0 separation
+    :param decay_length: float decay constant
+    :return: float pressure and pressure derivative
+    '''
+    return (magnitude * torch.exp(- h / decay_length),
+            - magnitude / decay_length * torch.exp(- h / decay_length))
 def p_exp_and_rep(h, magnitude=1e7, decay_length=1e-9, H_rep=1e-19, z0=0.5e-9):
     '''
     superposition of exponential repulsion and short range, hard wall repulsion
@@ -146,6 +158,22 @@ def p_exp_and_rep(h, magnitude=1e7, decay_length=1e-9, H_rep=1e-19, z0=0.5e-9):
     :return: float pressure and pressure derivative
     '''
     p1, ph1 = p_exp(h, magnitude, decay_length)
+    p2, ph2 = p_vdw(h, H2=0, H1=H_rep, z0=z0)
+    return (p1 + p2,
+            ph1 + ph2)
+
+def p_exp_and_rep_TORCH(h, magnitude=1e7, decay_length=1e-9, H_rep=1e-19, z0=0.5e-9):
+    '''
+    superposition of exponential repulsion and short range, hard wall repulsion
+    FOR PYTORCH TENSORS
+    :param h: float distance between bodies
+    :param magnitude: float magnitude of exponential repulsive force at 0 separation
+    :param decay_length: float decay constant of exponential force
+    :param H_rep: float hard wall repulsion hamaker constant
+    :param z0: decay constant of hard wall repulsion
+    :return: float pressure and pressure derivative
+    '''
+    p1, ph1 = p_exp_TORCH(h, magnitude, decay_length)
     p2, ph2 = p_vdw(h, H2=0, H1=H_rep, z0=z0)
     return (p1 + p2,
             ph1 + ph2)
@@ -433,8 +461,8 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
         # update the state according to rk4 integration
         if use_cuda:  # need to benchmark this
             state, (p, h) = rk4(state, dt, rhs_N_1_rigid_cuda, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
-            u = state[:, 0].cpu().numpy()
-            h0 = state[:, 1].cpu().numpy()[0]
+            u = state[:, 0]#.cpu().numpy()
+            h0 = state[:, 1][0]#.cpu().numpy()[0]
         else:
             state, (p, h) = rk4(state, dt, rhs_N_1_rigid, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
             u, h0 = state
