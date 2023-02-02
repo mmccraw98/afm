@@ -196,9 +196,7 @@ def p_degennes(h, L0=2e-6, N=3e14, T=300, H_rep=1e-19, z0=0.5e-9):
     C = kb * T * L0 * N ** (3 / 2)
 
     P = 2 * C * (L0 ** (5 / 4) * h ** (-9 / 4) - L0 ** (-7 / 4) * h ** (3 / 4))
-    P[P < 0] = 0
     Ph = - C / 2 * (3 * L0 ** (-7 / 4) * h ** (-1 / 4) + 9 * L0 ** (5 / 4) * h ** (-13 / 4))
-    Ph[Ph > 0] = 0
 
     p_hw, ph_hw = p_vdw(h, H1=H_rep, H2=0, z0=z0)
     return (P + p_hw, Ph + ph_hw)
@@ -383,7 +381,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
                       nr=int(1e3), dr=1.5e-9,
                       dt=1e-4, nt=int(1e6),
                       force_target=1e-6, pos_target=-1e-8, pct_log=0.0001, use_cuda=False,
-                      remesh=False, u_tol=1e-9, remesh_factor=1.01):
+                      remesh=False, u_tol=1e-9, remesh_factor=1.01, log_all=False):
     '''
     integrate the interaction of the probe (connected to a rigid cantilever) with a sample defined by a viscoelastic
     ODE of maximum order N=1, using RK4 time integration
@@ -408,6 +406,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     :param remesh: bool whether to remesh the domain
     :param u_tol: tolerance for the 'infinite' displacement value
     :param remesh_factor: float how large the domain will expand if remeshing
+    :param log_all: bool whether to log surface distribution data, default is False
     :return: data dict containing sim dataframe and sim parameters
     '''
     saved_args = locals()  # save all function arguments for later
@@ -454,6 +453,11 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     time = np.zeros(nt)
     u_inf = np.zeros(nt)
 
+    if log_all:
+        U_log = np.zeros((nt, u.size))
+        P_log = np.zeros((nt, u.size))
+        r_log = np.zeros((nt, u.size))
+
     # run simulation
     print(' % |  z_tip  |  z_target |  force  |  force_target  |  u(inf,t)')
     start = time_.time()
@@ -472,6 +476,10 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
         tip_pos[n] = h0
         time[n] = n * dt
         u_inf[n] = u[-1]
+        if log_all:
+            U_log[n] = u
+            P_log[n] = p
+            r_log[n] = r
         if n % (pct_log * nt) == 0:
             print('{} | {:.1f} nm | {:.1f} nm | {:.1f} nN | {:.1f} nN | {:.1f} nm'.format(
                 n / nt, tip_pos[n] * 1e9, pos_target * 1e9, force[n] * 1e9,
@@ -485,6 +493,10 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
             tip_pos = tip_pos[:n + 1]
             time = time[:n + 1]
             u_inf = u_inf[:n + 1]
+            if log_all:
+                U_log = U_log[:n + 1]
+                P_log = P_log[:n + 1]
+                r_log = r_log[:n + 1]
             break
         if remesh and abs(u[-1]) > u_tol:
             # remake domain
@@ -524,5 +536,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     df = pd.DataFrame({'time': time, 'separation': separation, 'tip_pos': tip_pos,
                        'force': force, 'inden': inden, 'force_rep': force_rep,
                        'deformation': separation - tip_pos, 'u_inf': u_inf})
-    data = {'df': df, 'sim_arguments': saved_args}
+    data = {'df': df, 'sim_arguments': saved_args, 'log_all': 0}
+    if log_all:
+        data['log_all'] = {'u': U_log, 'p': P_log, 'r': r_log}
     return data
