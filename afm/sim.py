@@ -540,3 +540,85 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     if log_all:
         data['log_all'] = {'u': U_log, 'p': P_log, 'r': r_log}
     return data
+
+
+
+
+def simulate_prescribed_N1(Gg, Ge, Tau, v, v_t, h0, R, p_func, *args,
+                           nr=int(1e3), dr=1.5e-9, dt=1e-4, pct_log=0.01):
+    '''
+    integrate the interaction of the probe (connected to a rigid cantilever) with a sample defined by a viscoelastic
+    ODE of maximum order N=1, using RK4 time integration with the probe position prescribed as a function of time
+    :param Gg: float instantaneous shear modulus
+    :param Ge: float equilibrium shear modulus
+    :param Tau: float relaxation time
+    :param v: float poisson's ratio
+    :param v_t: np.array prescribed probe velocity as a function of time
+    :param h0: float initial position of the probe relative to the sample
+    :param R: float radius of the spherical probe
+    :param p_func: function describing the point-probe pressure distribution p_func(h, *args)
+    :param args: optional arguments for p_func pressure distribution
+    :param nr: int number of spatial discretization points
+    :param dr: float spatial discretization
+    :param dt: float temporal discretization
+    :param pct_log: float percentage of sim steps to log sim state to console
+    :return: data dict containing sim dataframe and sim parameters
+    '''
+    saved_args = locals()  # save all function arguments for later
+
+    # discretize domain
+    r = np.linspace(1, nr, nr) * dr
+    # calculate integrating kernels
+    k_ij = np.array([K(r_, r, dr) for r_ in r])
+    I = np.eye(r.size)  # make identity matrix
+    u = np.zeros(r.shape)  # initialize deformation
+    state = np.array([u, h0], dtype='object')  # make state vector
+
+    # get generalized viscoelastic coefficients
+    if Ge == 0 and Tau == 0:
+        b1, b0, c1, c0 = get_coefs_elastic(Gg, v)
+    else:
+        b1, b0, c1, c0 = get_coefs_sls(Gg, Ge, Tau, v)
+
+    print('b1 | b0 | c1 | c0')
+    print(b1, b0, c1, c0)
+    print('max. r: {}'.format(max(r)))
+
+    # make loggers
+    nt = v_t.size
+    force = np.zeros(nt)
+    separation = np.zeros(nt)
+    tip_pos = np.zeros(nt)
+    time = np.zeros(nt)
+    u_inf = np.zeros(nt)
+
+    # run simulation
+    print(' % |  z_tip  |  force  |  u(inf,t) | t')
+    start = time_.time()
+    for n in range(nt):
+        # update the state according to rk4 integration
+        v0 = v_t[n]
+        state, (p, h) = rk4(state, dt, rhs_N_1_rigid, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
+        u, h0 = state
+        force[n] = (2 * np.pi * p @ r * dr)  # calculate the force
+        # log
+        separation[n] = h[0]
+        tip_pos[n] = h0
+        time[n] = n * dt
+        u_inf[n] = u[-1]
+        if n % (pct_log * nt) == 0:
+            print('{} | {:.1f} nm | {:.1f} nN | {:.1f} nm | {:.1f} s'.format(
+                n / nt, tip_pos[n] * 1e9, force[n] * 1e9, u[-1] * 1e9, nt * dt))
+
+    print('done in {:.0f}s'.format(time_.time() - start))
+    # save sim data
+    inden = np.zeros(time.size)
+    contact_index = np.argmin(force)
+    inden[contact_index:] = tip_pos[contact_index] - tip_pos[contact_index:]
+    force_rep = np.zeros(time.size)
+    force_rep[contact_index:] = force[contact_index:] - force[contact_index]
+    df = pd.DataFrame({'time': time, 'separation': separation, 'tip_pos': tip_pos,
+                       'force': force, 'inden': inden, 'force_rep': force_rep,
+                       'deformation': separation - tip_pos, 'u_inf': u_inf})
+    data = {'df': df, 'sim_arguments': saved_args, 'log_all': 0}
+    return data
