@@ -877,7 +877,7 @@ def simulate_cantilever_N1(Gg, Ge, Tau, v, zt, zb, R, f_exc_func, vb_func, p_fun
     zb, zt, vt = zb_zt_vt.T
     f_ts, f_exc, at = f_ts_f_exc_at.T
     defl = zt - zb
-    inden = zb - defl
+    inden = - (zb + defl)  # this must be reversed as compared to the true relationship as zbase increases in AFM
 
     print('done in {:.0f}s'.format(time_.time() - start))
     # save sim data
