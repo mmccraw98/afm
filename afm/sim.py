@@ -620,7 +620,7 @@ def simulate_prescribed_N1(Gg, Ge, Tau, v, v_t, h0, R, p_func, *args,
         u_inf[n] = u[-1]
         if n % (pct_log * nt) == 0:
             print('{} | {:.1f} nm | {:.1f} nN | {:.1f} nm | {:.1f} s'.format(
-                n / nt, tip_pos[n] * 1e9, force[n] * 1e9, u[-1] * 1e9, nt * dt))
+                n / nt, tip_pos[n] * 1e9, force[n] * 1e9, u[-1] * 1e9, n * dt))
 
     print('done in {:.0f}s'.format(time_.time() - start))
     # save sim data
