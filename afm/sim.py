@@ -112,6 +112,18 @@ def p_vdw(h, H1=1e-19, H2=1e-19, z0=1e-9):
     return (1 / (6 * np.pi * h ** 3) * (H1 * (z0 / h) ** 6 - H2),
             1 / (2 * np.pi * h ** 4) * (H2 - 3 * H1 * (z0 / h) ** 6))
 
+def p_hw(h, H=1e-19, z0=1e-9, n=9):
+    '''
+    calculates the physical apprximation of the hard-wall repulsive pressure and derivative as a function of distance
+    :param h: (float or numpy array) distance between bodies
+    :param H: (float) repulsive Hamaker constant
+    :param z0: (float) equilibrium separation distance
+    :param n: (int) repulsion exponent
+    :return: (float or numpy array x2) pressure, derivative of pressure with respect to distance
+    '''
+    return (H * z0 ** (n - 3) / (6 * np.pi * h ** n),
+            - n * H * z0 ** (n - 3) / (6 * np.pi * h ** n))
+
 def p_exp_approx(h, H_rep=1e7, k_inv=1/1e-9, h_off=0):
     '''
     calculates an approximation for an exponential repulsion potential
@@ -621,4 +633,258 @@ def simulate_prescribed_N1(Gg, Ge, Tau, v, v_t, h0, R, p_func, *args,
                        'force': force, 'inden': inden, 'force_rep': force_rep,
                        'deformation': separation - tip_pos, 'u_inf': u_inf})
     data = {'df': df, 'sim_arguments': saved_args, 'log_all': 0}
+    return data
+
+
+def rk4_mixed(state_vectors, state_scalars, dt, rhs_func_mixed, *args):
+    '''
+    Runge Kutta 4th order time integration update scheme
+    :param state_vectors: (vector) vector variables to integrate
+    :param state_scalars: (vector like) vector of scalar variables to integrate
+    :param dt: (float) time discretization
+    :param rhs_func_mixed: function to calculate the time derivatives of the state of form
+    rhs_func(state_vectors, state_scalars, *args) returns (time derivative of state vector, (extra stuff))
+    :param args: (optional) arguments for the rhs_func
+    :return: (numpy array) integrated state at t=t+dt, (extra stuff calculated at final step)
+    '''
+    k1v, k1s, _, _ = rhs_func_mixed(state_vectors, state_scalars, *args)
+    k2v, k2s, _, _ = rhs_func_mixed(state_vectors + dt * k1v / 2, state_scalars + dt * k1s,
+                                    *args)
+    k3v, k3s, _, _ = rhs_func_mixed(state_vectors + dt * k2v / 2, state_scalars + dt * k2s / 2,
+                                    *args)
+    k4v, k4s, extra_vectors, extra_scalars = rhs_func_mixed(state_vectors + dt * k3v,
+                                                            state_scalars + dt * k3s, *args)
+    return (state_vectors + (k1v + 2 * k2v + 2 * k3v + k4v) * dt / 6,
+            state_scalars + (k1s + 2 * k2s + 2 * k3s + k4s) * dt / 6,
+            extra_vectors, extra_scalars)
+
+def rhs_mixed(state_vectors, state_scalars, t, b1, b0, c1, c0, r, dr, R, k_ij, I, use_cuda, f_exc_func, vb_func,
+              m, k_eff, Q0, w0, p_func, *args):
+    '''
+    calculates the derivative of the state_vectors and state_scalars (surface deformation and probe position)
+    assuming that the probe position is governed by a simple harmonic oscillator with a prescribed base velocity
+    and base excitation - also assuming that the viscoelastic ODE is order N=1
+    :param state_vectors: array state vector (deformation)
+    :param state_scalars: array state scalars (zbase, ztip, vtip)
+    :param t: float time
+    :param b1: float viscoelastic coefficient b1
+    :param b0: float viscoelastic coefficient b0
+    :param c1: float viscoelastic coefficient c1
+    :param c0: float viscoelastic coefficient c0
+    :param r: float radial spatial axis
+    :param dr: float spatial discretization
+    :param R: float spherical probe radius
+    :param k_ij: matrix (nr x nr) integrating kernel
+    :param I: numpy matrix (nr x nr) identity matrix
+    :param use_cuda: bool True to use cuda
+    :param f_exc_func: function to calculate the excitation force on the cantilever, uses args: (t, zt, zb, f_ts, k_eff)
+    :param vb_func: function to calculate the velocity of the cantilever base, uses args: (t, zt, zb, f_ts, k_eff)
+    :param m: effective mass of first cantilever mode
+    :param k_eff: effective spring constant of first cantilever mode
+    :param Q0: Q factor of first cantilever mode
+    :param w0: resonant frequency of first cantilever mode
+    :param p_func: function for calculating sphere-point pressure distribution p_func(h, *args)
+    :param args: optional arguments for p_func
+    :return: numpy array derivative of state vector (deformation rate, probe velocity)
+    '''
+    u = state_vectors
+    zb, zt, vt = state_scalars
+    # calculate state derivatives
+    # first calculate the derivatives for the surface
+    h_calc(zt, u, f_sphere, r, R)
+    h = h_calc(zt, u, f_sphere, r, R)  # calculate the separation
+    p, p_h = p_func(h, *args)  # calculate the pressure and derivative
+    f_ts = 2 * np.pi * p @ r * dr  # calculate the tip-sample force
+    # calculate LHS G matrix
+    G_ij = c1 * dr * k_ij * p_h * r - b1 * I
+    d_j = c1 * vt * dr * k_ij @ (p_h * r) + c0 * dr * k_ij @ (p * r) + b0 * u
+    # solve the system of equations to calculate u_dot
+    if use_cuda:
+        u_dot = torch.linalg.solve(G_ij, d_j)
+    else:
+        u_dot = np.linalg.solve(G_ij, d_j)
+    # then calculate the derivatives of the cantilever
+    f_exc = f_exc_func(t, zt, zb, f_ts, k_eff)
+    zb_dot = vb_func(t, zt, zb, f_ts, k_eff)
+    zt_dot = vt
+    vt_dot = 1 / m * (f_exc + f_ts + k_eff * (zb - zt) - m * Q0 / w0 * vt)
+    # returns: ((state vectors, state scalars), (extra vectors, extra scalars) (won't be used for integration))
+    if use_cuda:
+        return (u_dot, torch.tensor([zb_dot, zt_dot, vt_dot]), (p, h), torch.tensor([f_ts, f_exc, vt_dot]))
+    else:
+        return (u_dot, np.array([zb_dot, zt_dot, vt_dot]), (p, h), np.array([f_ts, f_exc, vt_dot]))
+
+def simulate_cantilever_N1(Gg, Ge, Tau, v, zt, zb, R, f_exc_func, vb_func, p_func, *args,
+                           nr=int(1e3), dr=1.5e-9, dt=1e-4, nt=int(1e6), w0=10e3, Q0=100, k_eff=1,
+                           force_target=1e-6, pos_target=-1e-8, pct_log=0.0001, use_cuda=False, log_all=False):
+    '''
+    integrate the interaction of the probe (connected to a SHO cantilever) with a sample defined by a viscoelastic
+    ODE of maximum order N=1, using RK4 time integration
+    :param Gg: float instantaneous shear modulus
+    :param Ge: float equilibrium shear modulus
+    :param Tau: float relaxation time
+    :param v: float poisson's ratio
+    :param zt: float initial tip position
+    :param zb: float initial probe position
+    :param R: float radius of the spherical probe
+    :param f_exc_func: function to calculate the excitation force on the cantilever, uses args: (t, zt, zb, f_ts, k_eff)
+    :param vb_func: function to calculate the velocity of the cantilever base, uses args: (t, zt, zb, f_ts, k_eff)
+    :param p_func: function describing the point-probe pressure distribution p_func(h, *args)
+    :param args: optional arguments for p_func pressure distribution
+    :param nr: int number of spatial discretization points
+    :param dr: float spatial discretization
+    :param dt: float temporal discretization
+    :param nt: int number of time discretization points
+    :param force_target: float maximum force in simulation
+    :param pos_target: float target position of probe
+    :param pct_log: float percentage of sim steps to log sim state to console
+    :param use_cuda: bool whether to use CUDA cores for calculation acceleration (nearly 1 order of magnitude
+    compared against numpy.linalg.solve)
+    :param log_all: bool whether to log surface distribution data, default is False
+    :return: data dict containing sim dataframe and sim parameters
+    '''
+    saved_args = locals()  # save all function arguments for later
+    # discretize domain
+    r = np.linspace(1, nr, nr) * dr
+    # calculate integrating kernels
+    k_ij = np.array([K(r_, r, dr) for r_ in r])
+    I = np.eye(r.size)  # make identity matrix
+    u = np.zeros(r.shape)  # initialize deformation
+
+    # get generalized viscoelastic coefficients
+    if Ge == 0 and Tau == 0:
+        b1, b0, c1, c0 = get_coefs_elastic(Gg, v)
+    else:
+        b1, b0, c1, c0 = get_coefs_sls(Gg, Ge, Tau, v)
+
+    print('b1 | b0 | c1 | c0')
+    print(b1, b0, c1, c0)
+    print('max. r: {}'.format(max(r)))
+
+    # forces
+    f_ts = 0
+    f_exc = 0
+
+    # probe variables
+    m = k_eff / w0 ** 2
+    vb = vb_func(0, zt, zb, f_ts, k_eff)
+    vt = vb
+
+    # form state
+    state_vectors = u
+    state_scalars = np.array([zb, zt, vt])
+
+    # make loggers
+    central_deformation = np.zeros(nt)
+    zb_zt_vt = np.zeros((nt, state_scalars.size))
+    f_ts_f_exc_at = np.zeros((nt, 3))
+    time = np.zeros(nt)
+    u_inf = np.zeros(nt)
+
+    log_all = False
+    if log_all:
+        U_log = np.zeros((nt, u.size))
+        P_log = np.zeros((nt, u.size))
+        H_log = np.zeros((nt, u.size))
+        r_log = np.zeros((nt, u.size))
+
+    if use_cuda and torch.cuda.is_available():
+        print('Solving on GPU:')
+        print(torch.cuda.get_device_name(0))
+        torch.set_default_tensor_type(torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor)
+        r = torch.linspace(1, nr, nr, device='cuda') * dr
+        # TODO: there is a lot of computational overhead in making the cuda version of k_ij, should be fixed easily
+        k = torch.zeros([nr, nr], device='cuda')
+        for i, row in enumerate(k_ij):
+            for j, K_IJ in enumerate(row):
+                k[i, j] += K_IJ
+        k_ij = k
+        I = torch.eye(nr, device='cuda')
+        u = torch.zeros(nr, device='cuda')
+
+        # forces
+        f_ts = torch.tensor(f_ts, device='cuda')
+        f_exc = torch.tensor(f_exc, device='cuda')
+        # probe variables
+        zt = torch.tensor(zt, device='cuda')
+        zb = torch.tensor(zb, device='cuda')
+        vb = torch.tensor(vb, device='cuda')
+        vt = torch.tensor(vt, device='cuda')
+
+        # form state
+        state_vectors = u
+        state_scalars = torch.tensor([zb, zt, vt], device='cuda')
+
+        # make loggers
+        central_deformation = torch.zeros(nt, device='cuda')
+        zb_zt_vt = torch.zeros((nt, state_scalars.size()[0]), device='cuda')
+        f_ts_f_exc_at = torch.zeros((nt, state_scalars.size()[0]), device='cuda')
+        time = torch.zeros(nt, device='cuda')
+        u_inf = torch.zeros(nt, device='cuda')
+
+        # cantilever, probe, and sample variables
+        R = torch.tensor(R, device='cuda')
+        b1, b0 = torch.tensor(b1, device='cuda'), torch.tensor(b0, device='cuda')
+        c1, c0 = torch.tensor(c1, device='cuda'), torch.tensor(c0, device='cuda')
+        w0 = torch.tensor(w0, device='cuda')
+        Q0 = torch.tensor(Q0, device='cuda')
+        k_eff = torch.tensor(k_eff, device='cuda')
+        m = torch.tensor(m, device='cuda')
+
+        if log_all:
+            U_log = torch.zeros((nt, u.size()[0]), device='cuda')
+            P_log = torch.zeros((nt, u.size()[0]), device='cuda')
+            H_log = torch.zeros((nt, u.size()[0]), device='cuda')
+            r_log = torch.zeros((nt, u.size()[0]), device='cuda')
+
+    # solve
+    print(' % |  z_tip  |  z_target |  force  |  force_target  |  u(inf,t)')
+    start = time_.time()
+    for n in range(nt):
+        t = n * dt  # advance time
+        state_vectors, state_scalars, extra_vectors, extra_scalars = rk4_mixed(state_vectors, state_scalars, dt,
+                                                                               rhs_mixed, t, b1, b0, c1, c0, r, dr,
+                                                                               R, k_ij, I, use_cuda, f_exc_func,
+                                                                               vb_func, m, k_eff, Q0, w0,
+                                                                               p_vdw, 1e-19, 0, 1e-9)
+        # log
+        zb_zt_vt[n] = state_scalars
+        f_ts_f_exc_at[n] = extra_scalars
+        central_deformation[n] = state_vectors[0]
+        time[n] = t
+
+        if n % (pct_log * nt) == 0:
+            print('{} | {:.1f} nm | {:.1f} nN | {:.1f} nm | {:.1f} s'.format(
+                n / nt, zb_zt_vt[n, 0] * 1e9, f_ts_f_exc_at[n, 0] * 1e9, state_vectors[-1] * 1e9, nt * dt))
+        if log_all:
+            U_log[n] = state_vectors[0]
+            P_log[n] = extra_vectors[0]
+            H_log[n] = extra_vectors[1]
+            r_log[n] = r
+    if use_cuda:
+        zb_zt_vt = zb_zt_vt.cpu().numpy()
+        f_ts_f_exc_at = f_ts_f_exc_at.cpu().numpy()
+        central_deformation = central_deformation.cpu().numpy()
+        time = time.cpu().numpy()
+        k_eff = k_eff.cpu().numpy()
+        u_inf = u_inf.cpu().numpy()
+        if log_all:
+            U_log = U_log.cpu().numpy()
+            P_log = P_log.cpu().numpy()
+            H_log = H_log.cpu().numpy()
+            r_log = r_log.cpu().numpy()
+    zb, zt, vt = zb_zt_vt.T
+    f_ts, f_exc, at = f_ts_f_exc_at.T
+    defl = zt - zb
+    inden = zb - defl
+
+    print('done in {:.0f}s'.format(time_.time() - start))
+    # save sim data
+    separation = zt - central_deformation
+    df = pd.DataFrame({'time': time, 'separation_true': separation, 'tip_pos': zt, 'tip_vel': vt, 'tip_accel': at,
+                       'base_pos': zb, 'force_ts_true': f_ts, 'force_ts_afm': defl * k_eff, 'defl': defl,
+                       'inden_afm': inden, 'sample_pos': central_deformation, 'u_inf': u_inf})
+    data = {'df': df, 'sim_args': saved_args, 'log_all': 0}
+    if log_all:
+        data['log_all'] = {'U_log': U_log, 'P_log': P_log, 'H_log': H_log, 'r_log': r_log}
     return data
