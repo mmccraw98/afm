@@ -852,6 +852,7 @@ def simulate_cantilever_N1(Gg, Ge, Tau, v, zt, zb, R, f_exc_func, vb_func, p_fun
         f_ts_f_exc_at[n] = extra_scalars
         central_deformation[n] = state_vectors[0]
         time[n] = t
+        u_inf[n] = state_vectors[-1]
 
         if n % (pct_log * nt) == 0:
             print('{} | {:.1f} nm | {:.1f} nN | {:.1f} nm | {:.1f} s'.format(
