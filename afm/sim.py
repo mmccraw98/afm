@@ -4,20 +4,35 @@ import pandas as pd
 import torch
 import time as time_
 
-def hertzian(inden, E, v, R):
+def hertzian(inden, G, v, R):
     '''
-    calculate hertzian (elastic) contact force
+    calculate hertzian (elastic) contact force as a function of the indentation depth
     :param inden: float indentation depth
-    :param E: float shear modulus
+    :param G: float shear modulus
     :param v: float poissons ratio
     :param R: float indenter radius
     :return: float force
     '''
-    return 4 / 3 * np.sqrt(R) * E / (1 - v ** 2) * inden ** 1.5
+    return 4 / 3 * np.sqrt(R) * G / (1 - v ** 2) * inden ** 1.5
+
+def ext_hertzian_hc(z, z0, G, v, R):
+    '''
+    calculate the extended hertzian (elastic) contact force, for the hard-contact case, as a function of the indenter
+    position and sample equilibrium position
+    :param z: float indenter position
+    :param z0: float sample equilibrium position
+    :param G: float sample shear modulus
+    :param v: float sample poisson's ratio
+    :param R: float indenter radius
+    :return: float force
+    '''
+    z_shift = z - z0
+    chi = (abs(z_shift) - z_shift) / 2
+    return hertzian(chi, G, v, R)
 
 def lee_radok(inden, v, R, Gg, Ge, Tau, t):
     '''
-    calculate lee and radok (viscoelastic) contact force
+    calculate lee and radok (viscoelastic) contact force as a function of indentation depth
     :param inden: float indentation depth
     :param v: float poissons ratio
     :param R: float indenter radius
@@ -35,6 +50,24 @@ def lee_radok(inden, v, R, Gg, Ge, Tau, t):
     a = 4 * np.sqrt(R) / (3 * (1 - v ** 2))
     H = inden ** 1.5
     return a * (Gg * H - G / Tau * np.convolve(exp, H, 'full')[: t.size] * dt)
+
+def ext_lee_radok_hc(z, z0, Gg, Ge, Tau, v, R, t):
+    '''
+    calculate the extended viscoelastic (lee-radok) contact force, for the hard-contact case, as a function of
+    the indenter position and sample equilibrium position
+    :param z: float indenter position
+    :param z0: float sample equilibrium position
+    :param Gg: float instantaneous shear modulus
+    :param Ge: float equilibrium shear modulus
+    :param Tau: float relaxation time
+    :param v: float poissons ratio
+    :param R: float indenter radius
+    :param t: float time axis
+    :return: float force
+    '''
+    z_shift = z - z0
+    chi = (abs(z_shift) - z_shift) / 2
+    return lee_radok(chi, v, R, Gg, Ge, Tau, t)
 
 def In_L(r_n, dr):
     '''
