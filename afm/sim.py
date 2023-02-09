@@ -747,7 +747,7 @@ def rhs_mixed(state_vectors, state_scalars, t, b1, b0, c1, c0, r, dr, R, k_ij, I
     else:
         return (u_dot, np.array([zb_dot, zt_dot, vt_dot]), (p, h), np.array([f_ts, f_exc, vt_dot]))
 
-def simulate_cantilever_N1(Gg, Ge, Tau, v, zt, zb, R, f_exc_func, vb_func, p_func, *args,
+def simulate_cantilever_N1(Gg, Ge, Tau, v, zt, vt, zb, R, f_exc_func, vb_func, p_func, *args,
                            nr=int(1e3), dr=1.5e-9, dt=1e-4, nt=int(1e6), w0=10e3, Q0=100, k_eff=1,
                            force_target=1e-6, pos_target=-1e-8, pct_log=0.0001, use_cuda=False, log_all=False):
     '''
@@ -758,6 +758,7 @@ def simulate_cantilever_N1(Gg, Ge, Tau, v, zt, zb, R, f_exc_func, vb_func, p_fun
     :param Tau: float relaxation time
     :param v: float poisson's ratio
     :param zt: float initial tip position
+    :param vt: float initial probe velocity
     :param zb: float initial probe position
     :param R: float radius of the spherical probe
     :param f_exc_func: function to calculate the excitation force on the cantilever, uses args: (t, zt, zb, f_ts, k_eff)
@@ -801,7 +802,6 @@ def simulate_cantilever_N1(Gg, Ge, Tau, v, zt, zb, R, f_exc_func, vb_func, p_fun
     # probe variables
     m = k_eff / w0 ** 2
     vb = vb_func(0, zt, zb, f_ts, k_eff)
-    vt = vb
 
     # form state
     state_vectors = u
