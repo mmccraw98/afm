@@ -878,7 +878,7 @@ def simulate_cantilever_N1(Gg, Ge, Tau, v, zt, vt, zb, R, f_exc_func, vb_func, p
                                                                                rhs_mixed, t, b1, b0, c1, c0, r, dr,
                                                                                R, k_ij, I, use_cuda, f_exc_func,
                                                                                vb_func, m, k_eff, Q0, w0,
-                                                                               p_vdw, 1e-19, 0, 1e-9)
+                                                                               p_func, *args)
         # log
         zb_zt_vt[n] = state_scalars
         f_ts_f_exc_at[n] = extra_scalars
