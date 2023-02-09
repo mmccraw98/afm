@@ -724,7 +724,6 @@ def rhs_mixed(state_vectors, state_scalars, t, b1, b0, c1, c0, r, dr, R, k_ij, I
     zb, zt, vt = state_scalars
     # calculate state derivatives
     # first calculate the derivatives for the surface
-    h_calc(zt, u, f_sphere, r, R)
     h = h_calc(zt, u, f_sphere, r, R)  # calculate the separation
     p, p_h = p_func(h, *args)  # calculate the pressure and derivative
     f_ts = 2 * np.pi * p @ r * dr  # calculate the tip-sample force
