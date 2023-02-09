@@ -888,7 +888,7 @@ def simulate_cantilever_N1(Gg, Ge, Tau, v, zt, vt, zb, R, f_exc_func, vb_func, p
 
         if n % (pct_log * nt) == 0:
             print('{} | {:.1f} nm | {:.1f} nN | {:.1f} nm | {:.1f} s'.format(
-                n / nt, zb_zt_vt[n, 0] * 1e9, f_ts_f_exc_at[n, 0] * 1e9, state_vectors[-1] * 1e9, nt * dt))
+                n / nt, zb_zt_vt[n, 0] * 1e9, f_ts_f_exc_at[n, 0] * 1e9, state_vectors[-1] * 1e9, n * dt))
         if log_all:
             U_log[n] = state_vectors[0]
             P_log[n] = extra_vectors[0]
