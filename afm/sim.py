@@ -557,10 +557,10 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
         f = np.inf
         while f > 1e-10:  # while starting force is too large, increase h0
             if use_cuda:  # need to benchmark this
-                state[:, 1] *= 10.0
+                state[:, 1] *= 2
                 state, (p, h) = rk4(state, dt, rhs_N_1_rigid_cuda, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
             else:
-                state[1] *= 10
+                state[1] *= 2
                 state, (p, h) = rk4(state, dt, rhs_N_1_rigid, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
             f = 2 * np.pi * p @ r * dr  # calculate the force
         print('done!')
