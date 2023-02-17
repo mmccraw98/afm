@@ -555,14 +555,12 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
         print('adjusting starting point...')
         # try first-step
         f = np.inf
-        increment_factor = 10
         while f > 1e-10:  # while starting force is too large, increase h0
-            h0 *= increment_factor
             if use_cuda:  # need to benchmark this
-                state = torch.cat((u, h0), 1)
+                state[:, 1] *= 10.0
                 state, (p, h) = rk4(state, dt, rhs_N_1_rigid_cuda, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
             else:
-                state = np.array([u, h0], dtype='object')  # make state vector
+                state[1] *= 10
                 state, (p, h) = rk4(state, dt, rhs_N_1_rigid, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
             f = 2 * np.pi * p @ r * dr  # calculate the force
         print('done!')
