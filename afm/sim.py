@@ -325,6 +325,50 @@ def rhs_N_1_rigid_cuda(state, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *ar
     return torch.cat((torch.reshape(u_dot, v0.shape), v0), 1), (p, h)
 
 
+def rhs_N_1_cantilever_cuda(u, zb, zt, vt, t, f_exc_func, vb_func, r, dr, R, k_ij, I, b1, b0, c1, c0, m, w0, Q0, K,
+                            p_func, *args):
+    '''
+    calculates the derivative of the state vector (surface deformation, base position, tip position, tip velocity)
+    assuming that the tip position is governed by a damped harmonic oscillator subjected to an excitation force
+    with a moveable base and an intermittent, long-range interaction with a linear (visco)elastic material
+    also assuming that the viscoelastic ODE is order N=1
+    :param u: torch float tensor displacement of surface (positive upwards) (m)
+    :param zb: float position of base (m)
+    :param zt: float position of tip (m)
+    :param vt: float velocity of tip (m/s)
+    :param t: float time (s)
+    :param f_exc_func: function that takes arguments (base pos, tip-sample force, tip pos, tip vel, and time) which
+    can be written for specific simulation runs - i.e. one may desire a resonant tapping mode something more complicated
+    where the excitation force changes based off of typical AFM observables which are given as arguments
+    :param vb_func: function that takes same arguments as f_exc_func (same philosophy here) that calculates the velocity
+    of the cantilever base
+    :param r: torch float tensor radial spatial axis (m)
+    :param dr: float spatial discretization (m)
+    :param R: float spherical probe radius (m)
+    :param k_ij: numpy matrix (nr x nr) integrating kernel
+    :param I: numpy matrix (nr x nr) identity matrix
+    :param b1: float viscoelastic coefficient b1
+    :param b0: float viscoelastic coefficient b0
+    :param c1: float viscoelastic coefficient c1
+    :param c0: float viscoelastic coefficient c0
+    :param p_func: function for calculating sphere-point pressure distribution p_func(h, *args)
+    :param args: optional arguments for p_func
+    :return: derivative of state variables: (deformation rate of surface (torch float tensor), base velocity (float),
+    tip velocity (float), tip acceleration (float)) + extra useful information (f_ts, f_exc, p, h)
+    '''
+    h = h_calc(zt, u, f_sphere, r, R)  # calculate the separation
+    p, p_h = p_func(h, *args)  # calculate the pressure and derivative
+    f_ts = 2 * np.pi * p @ r * dr  # calculate the tip-sample force
+    # calculate LHS G matrix
+    G_ij = c1 * dr * k_ij * p_h * r - b1 * I
+    # calculate RHS vectors, d_j
+    d_j = c1 * vt * dr * k_ij @ (p_h * r) + c0 * dr * k_ij @ (p * r) + b0 * u
+    u_dot = torch.linalg.solve(G_ij, d_j)  # solve the system of equations
+    vb = vb_func(zb, f_ts, zt, vt, t)
+    f_exc = f_exc_func(zb, f_ts, zt, vt, t)
+    at = 1 / m * (f_ts + f_exc + K * zb - m * w0 / Q0 * vt - K * zt)
+    return (u_dot, vb, vt, at), (f_ts, f_exc, p, h)
+
 def get_coefs_rajabifar(Gg, Ge, Tau, v):
     '''
     get viscoelastic ODE coefficients in the style of Rajabifar and Attard
@@ -426,7 +470,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
                       nr=int(1e3), dr=1.5e-9,
                       dt=1e-4, nt=int(1e6),
                       force_target=1e-6, pos_target=-1e-8, pct_log=0.0001, use_cuda=False,
-                      remesh=False, u_tol=1e-9, remesh_factor=1.01, log_all=False):
+                      remesh=False, u_tol=1e-9, remesh_factor=1.01, log_all=False, adjust_starting_point=False):
     '''
     integrate the interaction of the probe (connected to a rigid cantilever) with a sample defined by a viscoelastic
     ODE of maximum order N=1, using RK4 time integration
@@ -452,6 +496,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     :param u_tol: tolerance for the 'infinite' displacement value
     :param remesh_factor: float how large the domain will expand if remeshing
     :param log_all: bool whether to log surface distribution data, default is False
+    :param adjust_starting_point: bool whether to adjust starting point
     :return: data dict containing sim dataframe and sim parameters
     '''
     saved_args = locals()  # save all function arguments for later
@@ -480,6 +525,9 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
         h0 = torch.ones([nr, 1], device='cuda') * h0
         v0 = torch.ones([nr, 1], device='cuda') * v0
         state = torch.cat((u, h0), 1)
+    else:
+        use_cuda == False
+        print('GPU unavailable, using CPU')
 
     # get generalized viscoelastic coefficients
     if Ge == 0 and Tau == 0:
@@ -502,6 +550,24 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
         U_log = np.zeros((nt, u.size))
         P_log = np.zeros((nt, u.size))
         r_log = np.zeros((nt, u.size))
+
+
+
+    if adjust_starting_point:
+        print('adjusting starting point...')
+        # try first-step
+        f = np.inf
+        increment = 1e-8
+        while f > 1e-10:  # while starting force is too large, increase h0
+            h0 += increment
+            if use_cuda:  # need to benchmark this
+                state = torch.cat((u, h0), 1)
+                state, (p, h) = rk4(state, dt, rhs_N_1_rigid_cuda, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
+            else:
+                state = np.array([u, h0], dtype='object')  # make state vector
+                state, (p, h) = rk4(state, dt, rhs_N_1_rigid, r, dr, R, k_ij, I, v0, b1, b0, c1, c0, p_func, *args)
+            f = 2 * np.pi * p @ r * dr  # calculate the force
+        print('done!')
 
     # run simulation
     print(' % |  z_tip  |  z_target |  force  |  force_target  |  u(inf,t)')
@@ -667,6 +733,7 @@ def simulate_prescribed_N1(Gg, Ge, Tau, v, v_t, h0, R, p_func, *args,
                        'deformation': separation - tip_pos, 'u_inf': u_inf})
     data = {'df': df, 'sim_arguments': saved_args, 'log_all': 0}
     return data
+
 
 
 def rk4_mixed(state_vectors, state_scalars, dt, rhs_func_mixed, *args):

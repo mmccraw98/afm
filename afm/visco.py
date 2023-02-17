@@ -51,3 +51,10 @@ def qmax_obj(X, real, r, dt, re_weight=1, im_weight=1):
     return np.sum(re_weight * abs(np.real(pred - real)) ** 2 + im_weight * abs(np.imag(pred - real)) ** 2)
 
 
+def q_sls(X, s):
+    Ge = X[0]
+    G = X[1::2]
+    T = X[2::2]
+    return Ge + np.sum(G) - np.sum([g / (1 + t * s) for g, t in zip(G, T)], axis=0)
+
+
