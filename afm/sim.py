@@ -526,7 +526,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
         v0 = torch.ones([nr, 1], device='cuda') * v0
         state = torch.cat((u, h0), 1)
     else:
-        use_cuda == False
+        use_cuda = False
         print('GPU unavailable, using CPU')
 
     # get generalized viscoelastic coefficients
@@ -550,8 +550,6 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
         U_log = np.zeros((nt, u.size))
         P_log = np.zeros((nt, u.size))
         r_log = np.zeros((nt, u.size))
-
-
 
     if adjust_starting_point:
         print('adjusting starting point...')
