@@ -470,7 +470,8 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
                       nr=int(1e3), dr=1.5e-9,
                       dt=1e-4, nt=int(1e6),
                       force_target=1e-6, pos_target=-1e-8, pct_log=0.0001, use_cuda=False,
-                      remesh=False, u_tol=1e-9, remesh_factor=1.01, log_all=False, adjust_starting_point=False):
+                      remesh=False, u_tol=1e-9, remesh_factor=1.01, log_all=False, adjust_starting_point=False,
+                      b1=None, b0=None, c1=None, c0=None):
     '''
     integrate the interaction of the probe (connected to a rigid cantilever) with a sample defined by a viscoelastic
     ODE of maximum order N=1, using RK4 time integration
@@ -497,6 +498,10 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     :param remesh_factor: float how large the domain will expand if remeshing
     :param log_all: bool whether to log surface distribution data, default is False
     :param adjust_starting_point: bool whether to adjust starting point
+    :param b1: float (optional default is None) first order generalized viscoelastic ODE strain coefficient
+    :param b0: float (optional default is None) zeroth order generalized viscoelastic ODE strain coefficient
+    :param c1: float (optional default is None) first order generalized viscoelastic ODE stress coefficient
+    :param c0: float (optional default is None) zeroth order generalized viscoelastic ODE stress coefficient
     :return: data dict containing sim dataframe and sim parameters
     '''
     saved_args = locals()  # save all function arguments for later
@@ -529,11 +534,12 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
         use_cuda = False
         print('GPU unavailable, using CPU')
 
-    # get generalized viscoelastic coefficients
-    if Ge == 0 and Tau == 0:
-        b1, b0, c1, c0 = get_coefs_elastic(Gg, v)
-    else:
-        b1, b0, c1, c0 = get_coefs_sls(Gg, Ge, Tau, v)
+    if all([_ is None for _ in (b1, b0, c1, c0)]):
+        # get generalized viscoelastic coefficients if not explicitly given
+        if Ge == 0 and Tau == 0:
+            b1, b0, c1, c0 = get_coefs_elastic(Gg, v)
+        else:
+            b1, b0, c1, c0 = get_coefs_sls(Gg, Ge, Tau, v)
 
     print('b1 | b0 | c1 | c0')
     print(b1, b0, c1, c0)
