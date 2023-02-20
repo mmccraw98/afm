@@ -537,8 +537,10 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
     if all([_ is None for _ in (b1, b0, c1, c0)]):
         # get generalized viscoelastic coefficients if not explicitly given
         if Ge == 0 and Tau == 0:
+            print('assigning elastic coefs')
             b1, b0, c1, c0 = get_coefs_elastic(Gg, v)
         else:
+            print('assigning viscoelastic coefs')
             b1, b0, c1, c0 = get_coefs_sls(Gg, Ge, Tau, v)
 
     print('b1 | b0 | c1 | c0')
