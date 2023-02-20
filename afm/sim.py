@@ -543,6 +543,7 @@ def simulate_rigid_N1(Gg, Ge, Tau, v, v0, h0, R, p_func, *args,
 
     print('b1 | b0 | c1 | c0')
     print(b1, b0, c1, c0)
+
     print('max. r: {}'.format(max(r)))
 
     # make loggers
